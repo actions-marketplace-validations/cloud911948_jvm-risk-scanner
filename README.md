@@ -32,10 +32,26 @@ jobs:
 
 ```
 ./gradlew -q fatJar
-java -jar build/libs/jvm-risk-scanner.jar /path/to/repo            # 마크다운 리포트
-java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --json     # 감지 사실 + 지적 사항
+java -jar build/libs/jvm-risk-scanner.jar /path/to/repo                     # 마크다운 리포트
+java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --json              # 감지 사실 + 지적 사항
+java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --sarif             # GitHub code scanning 용
+java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --deps deps.txt     # 의존성 해석 출력으로 실제 버전·전이 의존성까지
+java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --suggest           # OSV 에만 있는 항목을 규칙 뼈대로 출력
 java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --rules my-rules.json
-java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --offline          # OSV 조회 없이 규칙 스냅샷만
+java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --offline           # 네트워크 조회 없이 규칙 스냅샷만
+```
+
+### 빌드 파일만 볼 때와 해석 결과를 줄 때
+
+빌드 파일에는 보통 Boot 버전만 적혀 있고 Security·Tomcat 은 BOM 이 정합니다. 그래서 기본 모드는 규칙 파일의 BOM 표로 추정합니다. `./gradlew dependencies --configuration runtimeClasspath > deps.txt` 또는 `mvn dependency:tree -DoutputFile=deps.txt` 로 뽑은 출력을 `--deps` 로 주면 추정이 아니라 실제 해석 버전을 쓰고, 전이 의존성 전체를 OSV 에 물어 `OSV-TRANSITIVE` 한 항목으로 냅니다. CI 에서는 [example/jvm-risk.yml](example/jvm-risk.yml) 처럼 트리를 먼저 뽑아 넘기면 됩니다.
+
+### 검토 끝난 항목 숨기기
+
+저장소 루트에 `.jvmrisk-ignore` 를 두면 다음 PR 부터 그 항목이 사라지고 리포트 끝에 억제 건수만 남습니다. 한 줄에 하나, 필요하면 제목에 들어갈 문자열로 좁힙니다.
+
+```
+CVE-2026-59270            # 내장 LDAP 안 씀, 2026-09 검토
+EOL-PAST spring-boot      # 4.0.8 이행 일정 확정
 ```
 
 ## 무엇을 보나
@@ -43,7 +59,7 @@ java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --offline          # OSV
 | 영역 | 판정 | 근거 |
 |---|---|---|
 | JDK 27 기본값 | GC 플래그가 없으면 소형 컨테이너에서 Serial→G1 전환을 경고. 압축 객체 헤더 기본화에 대해 `Unsafe`·JOL·lincheck·`-javaagent` 를 충돌 후보로 표시. JFR 사용 시 자동 마스킹 안내 | [JEP 523](https://openjdk.org/jeps/523), [JEP 534](https://openjdk.org/jeps/534) |
-| EOL | JDK·Spring Boot·Spring Framework·Spring Security·Redis·Tomcat 라인의 지원 종료가 지났거나 120일 이내 | endoflife.date. 배포판별로 다른 JDK 날짜는 규칙의 `note` 에 적어 두었습니다 |
+| EOL | JDK·Spring Boot·Spring Framework·Spring Security·Redis·Tomcat 라인의 지원 종료가 지났거나 120일 이내 | Spring·Tomcat·Redis 는 스캔 시점에 endoflife.date 를 조회해 규칙 표를 덮습니다. JDK 는 배포판별로 날짜가 달라 규칙 표를 유지하고 `note` 에 차이를 적었습니다 |
 | CVE | Spring Security 2026-08-20 권고(CVSS 9.4 내장 LDAP, DPoP, WebAuthn, XSS), Spring for GraphQL RCE(9.2), Redis TLS UAF | 규칙마다 출처 URL |
 
 ### 버전만 보고 CRITICAL 을 찍지 않습니다
@@ -56,7 +72,7 @@ java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --offline          # OSV
 
 ### 취약 버전 범위는 OSV 에서, 사용 조건은 규칙 파일에서
 
-스캔할 때마다 감지한 의존성으로 [OSV.dev](https://osv.dev) 를 조회합니다(제품당 대표 아티팩트 하나, 5초 타임아웃). 그래서 규칙 파일을 갱신하지 않아도 새 CVE 의 버전 범위와 수정 버전은 최신입니다. 네트워크가 막히면 규칙 파일의 스냅샷만 쓰고 리포트 머리에 그 사실을 적습니다. `--offline` 으로 조회를 끌 수 있습니다.
+스캔할 때마다 감지한 의존성으로 [OSV.dev](https://osv.dev) 를 조회합니다. Spring Security 처럼 모듈별로 CVE 가 등재되는 제품은 core·web·config·ldap·oauth2 를 함께 묻고, `--deps` 가 있으면 전이 의존성 전체를 한 번의 배치 조회로 묻습니다. 그래서 규칙 파일을 갱신하지 않아도 새 CVE 의 버전 범위와 수정 버전은 최신입니다. 네트워크가 막히면 규칙 파일의 스냅샷만 쓰고 리포트 머리에 그 사실을 적습니다. `--offline` 으로 조회를 끌 수 있습니다.
 
 OSV 에는 있지만 규칙 파일에 사용 흔적 정의가 없는 CVE 는 **제품당 한 줄로 묶어 MEDIUM** 으로 냅니다. Boot 2.7 라인의 Tomcat 9.0.65 는 OSV 등재 취약점이 40건인데, 낱개로 찍으면 리포트가 읽히지 않고 답은 어차피 라인 업그레이드 하나이기 때문입니다. 낱개 판정이 필요한 건은 규칙 파일에 흔적을 정의하면 위의 흔적 판정 경로로 올라옵니다.
 
@@ -70,7 +86,7 @@ OSV 가 다 아는 것은 아닙니다. Spring 이 2026-08-20 에 공개한 Secu
 
 - 빌드 파일을 정규식으로 읽습니다. Gradle·Maven 파서를 쓰지 않는 것은 의도입니다. DSL 변형마다 파서가 깨지는 것보다 못 찾으면 "미확인"으로 남기는 쪽이 운영에서 덜 위험했습니다.
 - JEP 534 는 깨지는 도구 목록을 제공하지 않습니다. `Unsafe`·JOL·lincheck·javaagent 항목은 "확인 필요" 신호이지 확정 판정이 아닙니다.
-- OSV 조회는 제품당 대표 아티팩트 하나(예: spring-security-core)만 묻습니다. 모듈별로 등재된 CVE 는 놓칠 수 있고, 그건 규칙 파일이 메웁니다.
+- `--deps` 없이 돌리면 전이 의존성은 보지 않습니다. 빌드 파일에 이름이 나오는 것만 봅니다.
 - 사용 흔적 검색은 문자열 매칭입니다. 서드파티 라이브러리가 같은 이름을 쓰면 오탐이 납니다. WebAuthn 규칙이 Yubico 구현을 잡았던 사례가 있어 Spring Security 전용 심볼로 좁혔습니다.
 - Windows 의 WSL 마운트(`/mnt/c`)에서는 파일 I/O 가 느립니다. 자바 파일 1,700개짜리 저장소가 35초 걸렸습니다. CI 러너에서는 문제가 되지 않습니다.
 
@@ -81,7 +97,7 @@ OSV 가 다 아는 것은 아닙니다. Spring 이 2026-08-20 에 공개한 Secu
 ./gradlew fatJar      # build/libs/jvm-risk-scanner.jar
 ```
 
-구조는 `Collector`(사실 수집) → `Osv`(취약 범위 조회) → `Evaluator`(규칙·OSV 대조) → `Report`(출력)이고, `Rules` 가 JSON 을 타입으로 읽습니다. 수집기는 판단하지 않고 평가기는 파일도 네트워크도 만지지 않습니다.
+구조는 `Collector`(사실 수집, `DepTree` 가 해석 출력 파싱) → `Osv`·`Eol`(온라인 조회) → `Evaluator`(규칙·OSV 대조) → `Ignore`(억제) → `Report`(마크다운·JSON·SARIF)이고, `Rules` 가 JSON 을 타입으로 읽습니다. 수집기는 판단하지 않고 평가기는 파일도 네트워크도 만지지 않습니다.
 
 ## 라이선스
 

@@ -1,10 +1,20 @@
 # 사용하는 저장소의 .github/workflows/jvm-risk.yml
 name: jvm-risk
 on: [pull_request]
-permissions: { contents: read, pull-requests: write }
+permissions: { contents: read, pull-requests: write, security-events: write }
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      # 선택: 실제 해석 버전과 전이 의존성까지 보려면 트리를 먼저 뽑는다
+      - run: ./gradlew -q dependencies --configuration runtimeClasspath > deps.txt || true
       - uses: cloud911948/jvm-risk-scanner@main
+        with:
+          deps-file: deps.txt
+          sarif: "true"
+      # 선택: Security 탭·PR 파일 뷰에 표시
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: jvm-risk.sarif }

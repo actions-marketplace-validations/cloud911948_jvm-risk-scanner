@@ -43,6 +43,19 @@ class FeatureTest {
     }
 
     @Test
+    void depTreeReadsPowerShellUtf16File() throws Exception {
+        Path f = Files.createTempFile("deps", ".txt");
+        String tree = "+--- org.springframework.boot:spring-boot-starter-web -> 2.7.18\r\n";
+        byte[] bom = {(byte) 0xFF, (byte) 0xFE};
+        byte[] body = tree.getBytes(java.nio.charset.StandardCharsets.UTF_16LE);
+        byte[] all = new byte[bom.length + body.length];
+        System.arraycopy(bom, 0, all, 0, 2);
+        System.arraycopy(body, 0, all, 2, body.length);
+        Files.write(f, all);
+        assertEquals("2.7.18", DepTree.read(f).get("org.springframework.boot:spring-boot-starter-web"));
+    }
+
+    @Test
     void resolvedVersionBeatsBomEstimate() {
         Facts f = new Collector(RULES).collect(Path.of("fixture3")); // Boot 3.5.13 → security 6.5.9 (bom~)
         Collector.applyResolved(f, Map.of("org.springframework.security:spring-security-core", "6.5.11"));

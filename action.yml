@@ -10,6 +10,12 @@ inputs:
   comment:
     description: PR 코멘트 작성 여부 (true/false)
     default: "true"
+  deps-file:
+    description: 미리 만들어 둔 의존성 해석 출력 파일 (gradle dependencies / mvn dependency:tree). 있으면 실제 버전과 전이 의존성까지 본다
+    default: ""
+  sarif:
+    description: jvm-risk.sarif 도 생성 (true/false). 업로드는 호출 워크플로에서 github/codeql-action/upload-sarif 로
+    default: "false"
 runs:
   using: composite
   steps:
@@ -20,8 +26,11 @@ runs:
     - shell: bash
       run: |
         "${{ github.action_path }}/gradlew" -q -p "${{ github.action_path }}" fatJar
-        java -jar "${{ github.action_path }}/build/libs/jvm-risk-scanner.jar" "${{ inputs.path }}" > jvm-risk-report.md
+        JAR="${{ github.action_path }}/build/libs/jvm-risk-scanner.jar"
+        DEPS=""; [ -n "${{ inputs.deps-file }}" ] && DEPS="--deps ${{ inputs.deps-file }}"
+        java -jar "$JAR" "${{ inputs.path }}" $DEPS > jvm-risk-report.md
         cat jvm-risk-report.md >> "$GITHUB_STEP_SUMMARY"
+        if [ "${{ inputs.sarif }}" = "true" ]; then java -jar "$JAR" "${{ inputs.path }}" $DEPS --sarif > jvm-risk.sarif; fi
     - if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
       shell: bash
       env:

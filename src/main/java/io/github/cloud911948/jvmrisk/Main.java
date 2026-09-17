@@ -52,9 +52,9 @@ public final class Main {
         Facts facts = new Collector(rules).collect(root);
         if (depsFile != null) {
             try {
-                Collector.applyResolved(facts, DepTree.parse(Files.readString(depsFile)));
+                Collector.applyResolved(facts, DepTree.read(depsFile));
             } catch (java.io.IOException e) {
-                usage("의존성 해석 출력을 읽을 수 없습니다: " + depsFile);
+                usage("의존성 해석 출력을 읽을 수 없습니다: " + depsFile + " (" + e.getMessage() + ")");
             }
         }
         Map<String, List<Osv.Vuln>> vulns = Map.of();
@@ -84,7 +84,7 @@ public final class Main {
 
     private static void usage(String reason) {
         System.err.println(reason);
-        System.err.println("사용: java -jar jvm-risk-scanner.jar [디렉터리] [--json] [--rules 경로] [--offline]");
+        System.err.println("사용: java -jar jvm-risk-scanner.jar [디렉터리] [--json | --sarif] [--rules 경로] [--deps 해석출력] [--offline] [--suggest]");
         System.exit(2);
     }
 }

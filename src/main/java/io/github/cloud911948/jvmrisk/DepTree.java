@@ -1,5 +1,9 @@
 package io.github.cloud911948.jvmrisk;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -18,6 +22,20 @@ public final class DepTree {
     private static final Pattern MAVEN = Pattern.compile("[|+\\\\\\s-]*([\\w.\\-]+):([\\w.\\-]+):(?:jar|war|pom|bundle|test-jar|ejb)(?::[\\w.\\-]+)?:([\\d][\\w.\\-]*):(?:compile|runtime|provided|test|system)");
 
     private DepTree() {}
+
+    /**
+     * 파일을 읽어 파싱한다. PowerShell 의 `>` 는 UTF-16(BOM 있음)으로 저장하고, cmd·bash 는 UTF-8/ANSI 다.
+     * BOM 으로 가르고, 없으면 UTF-8 로 읽되 깨진 바이트는 치환한다(트리 좌표는 ASCII 라 판정에 영향 없음).
+     */
+    public static Map<String, String> read(Path file) throws IOException {
+        byte[] b = Files.readAllBytes(file);
+        String text;
+        if (b.length >= 2 && (b[0] & 0xff) == 0xFF && (b[1] & 0xff) == 0xFE) text = new String(b, 2, b.length - 2, StandardCharsets.UTF_16LE);
+        else if (b.length >= 2 && (b[0] & 0xff) == 0xFE && (b[1] & 0xff) == 0xFF) text = new String(b, 2, b.length - 2, StandardCharsets.UTF_16BE);
+        else if (b.length >= 3 && (b[0] & 0xff) == 0xEF && (b[1] & 0xff) == 0xBB && (b[2] & 0xff) == 0xBF) text = new String(b, 3, b.length - 3, StandardCharsets.UTF_8);
+        else text = new String(b, StandardCharsets.UTF_8);
+        return parse(text);
+    }
 
     /** group:artifact → version. 같은 좌표가 여러 번 나오면 마지막(보통 같은 값) 유지. */
     public static Map<String, String> parse(String text) {
