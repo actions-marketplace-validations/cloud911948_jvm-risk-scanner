@@ -1,5 +1,9 @@
 package io.github.cloud911948.jvmrisk;
 
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -12,6 +16,9 @@ import java.util.List;
 public final class Main {
 
     public static void main(String[] args) {
+        // 리포트는 마크다운(UTF-8)이다. Windows 콘솔은 stdout 을 MS949 로 잡아 한글이 깨지므로 출력 인코딩을 고정한다.
+        System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(new FileOutputStream(FileDescriptor.err), true, StandardCharsets.UTF_8));
         Path root = Path.of(".");
         Path rulesFile = null;
         boolean json = false;
