@@ -90,6 +90,19 @@ public final class Collector {
         return f;
     }
 
+    /** 의존성 해석 출력이 있으면 대표 제품 버전을 실제 값으로 덮는다. BOM 추정보다 항상 우선. */
+    public static void applyResolved(Facts f, Map<String, String> resolved) {
+        if (resolved.isEmpty()) return;
+        f.resolved.putAll(resolved);
+        DepTree.PRODUCT_OF.forEach((coord, product) -> {
+            String v = resolved.get(coord);
+            if (v != null) {
+                f.deps.put(product, v);
+                f.src.put(product, "resolved");
+            }
+        });
+    }
+
     private void scanFile(Facts f, Path root, Path p, Map<String, Pattern> evidence) {
         String name = p.getFileName().toString();
         String ext = ext(name);

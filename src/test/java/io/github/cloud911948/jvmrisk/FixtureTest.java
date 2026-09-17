@@ -98,8 +98,8 @@ class FixtureTest {
     void osvOnlyVulnIsMediumAndKnownCveIsNotDuplicated() {
         Facts f = collect("fixture2"); // Boot 4.0.7 → netty 4.2.15
         java.util.Map<String, List<Osv.Vuln>> osv = java.util.Map.of("netty", List.of(
-                new Osv.Vuln("GHSA-c4c3-7fpv-j4q5", List.of("CVE-2026-75595"), "critical", "SNI bypass", List.of("4.2.17.Final"), "u1"),
-                new Osv.Vuln("GHSA-fccg-mwvh-qqg4", List.of("CVE-2026-75596"), "medium", "quadratic DoS", List.of("4.2.17.Final"), "u2")));
+                new Osv.Vuln("GHSA-c4c3-7fpv-j4q5", List.of("CVE-2026-75595"), "critical", "SNI bypass", List.of("4.2.17.Final"), "u1", List.of()),
+                new Osv.Vuln("GHSA-fccg-mwvh-qqg4", List.of("CVE-2026-75596"), "medium", "quadratic DoS", List.of("4.2.17.Final"), "u2", List.of())));
         List<Finding> findings = new Evaluator(RULES, TODAY, osv).evaluate(f);
         long n75595 = findings.stream().filter(x -> x.id().equals("CVE-2026-75595")).count();
         Finding grouped = findings.stream().filter(x -> x.id().equals("OSV-NETTY")).findFirst().orElseThrow();

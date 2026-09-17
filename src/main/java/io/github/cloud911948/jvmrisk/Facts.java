@@ -29,6 +29,12 @@ public final class Facts {
     public boolean jfr;
     /** 리포트 머리에 찍는 OSV 조회 상태. 판정엔 쓰지 않는다. */
     public String osv = "미조회(--offline)";
+    /** --deps 로 읽은 해석 결과(group:artifact → 실제 버전). 비어 있으면 빌드 파일 정규식+BOM 표로 간다. */
+    public final Map<String, String> resolved = new LinkedHashMap<>();
+    /** 전이 의존성 OSV 결과(group:artifact → 취약점). 대표 제품 좌표는 제외. */
+    public final Map<String, List<Osv.Vuln>> transitive = new LinkedHashMap<>();
+    public String eolSrc = "rules.json";
+    public List<Finding> suppressed = new ArrayList<>();
 
     public Facts(Path root) {
         this.root = root;

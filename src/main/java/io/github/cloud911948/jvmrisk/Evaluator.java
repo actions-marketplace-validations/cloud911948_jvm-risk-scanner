@@ -33,6 +33,7 @@ public final class Evaluator {
         jdk27(f, out);
         eol(f, out);
         cve(f, out);
+        transitive(f, out);
         misc(f, out);
         out.sort(Finding.BY_SEVERITY);
         return out;
@@ -62,7 +63,8 @@ public final class Evaluator {
     private void eol(Facts f, List<Finding> out) {
         for (String v : f.jdk) eolCheck(out, "jdk", v, "JDK");
         for (String k : List.of("spring-boot", "spring-framework", "spring-security")) {
-            eolCheck(out, k, f.deps.get(k), k + (f.src.containsKey(k) ? " (BOM)" : ""));
+            String t = f.src.get(k);
+            eolCheck(out, k, f.deps.get(k), k + (t == null ? "" : "resolved".equals(t) ? " (해석 결과)" : " (BOM)"));
         }
         for (Facts.Image img : f.images) eolCheck(out, img.name(), img.version(), img.name());
     }
@@ -102,6 +104,7 @@ public final class Evaluator {
         String tag = f.src.get(product);
         if ("bom".equals(tag)) label += " (Boot BOM 관리)";
         else if ("bom~".equals(tag)) label += " (Boot BOM 추정)";
+        else if ("resolved".equals(tag)) label += " (해석 결과)";
         java.util.Set<String> known = new java.util.HashSet<>();
         for (Rules.Cve c : rules.cves()) {
             if (!c.product().equals(product)) continue;
@@ -146,6 +149,18 @@ public final class Evaluator {
                 label + " " + version + ": OSV 등재 취약점 " + rest.size() + "건 (" + counts + ") — 흔적 규칙 미정의",
                 "버전만으로 판정(사용 조건 미확인): " + ids,
                 "같은 라인 최신 " + fix + " 이상으로 올리면 일괄 해소. 낱개 확인은 https://osv.dev/list?ecosystem=Maven&q=" + Osv.COORDS.get(product)));
+    }
+
+    /** --deps 로 받은 전이 의존성 중 OSV 에 걸린 것. 아티팩트당 한 줄이 아니라 전체를 한 항목으로, 세부는 detail 에. */
+    private void transitive(Facts f, List<Finding> out) {
+        if (f.transitive.isEmpty()) return;
+        int total = f.transitive.values().stream().mapToInt(List::size).sum();
+        long crit = f.transitive.values().stream().flatMap(List::stream).filter(v -> v.severity().equals("critical")).count();
+        String lines = f.transitive.entrySet().stream().map(e -> e.getKey() + ":" + f.resolved.get(e.getKey()) + " " + e.getValue().size() + "건"
+                + (e.getValue().stream().anyMatch(v -> v.severity().equals("critical")) ? "(C)" : "")).collect(Collectors.joining("; "));
+        out.add(new Finding(crit > 0 ? "high" : "medium", "OSV-TRANSITIVE",
+                "전이 의존성 " + f.transitive.size() + "개 아티팩트에 OSV 등재 취약점 " + total + "건 (CRITICAL " + crit + ")",
+                lines, "./gradlew dependencyInsight --dependency <artifact> 로 끌어오는 경로 확인 후 버전 강제 또는 상위 라이브러리 업그레이드"));
     }
 
     private void misc(Facts f, List<Finding> out) {
