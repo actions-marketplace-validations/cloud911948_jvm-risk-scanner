@@ -1,6 +1,9 @@
 # 사용하는 저장소의 .github/workflows/jvm-risk.yml
 name: jvm-risk
-on: [pull_request]
+on:
+  pull_request:
+  schedule:
+    - cron: "0 22 * * 0"   # 매주 월요일 07:00 KST. PR 이 없는 휴면 저장소도 새 CVE 를 놓치지 않게
 permissions: { contents: read, pull-requests: write, security-events: write }
 jobs:
   scan:
@@ -15,6 +18,7 @@ jobs:
         with:
           deps-file: deps.txt
           sarif: "true"
+          fail-on: high          # 비우면 리포트만
       # 선택: Security 탭·PR 파일 뷰에 표시
       - uses: github/codeql-action/upload-sarif@v3
         with: { sarif_file: jvm-risk.sarif }

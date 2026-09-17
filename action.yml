@@ -26,18 +26,30 @@ runs:
       with:
         distribution: temurin
         java-version: "21"
-    - shell: bash
+    - id: scan
+      shell: bash
       run: |
         "${{ github.action_path }}/gradlew" -q -p "${{ github.action_path }}" fatJar
         JAR="${{ github.action_path }}/build/libs/jvm-risk-scanner.jar"
-        DEPS=""; [ -n "${{ inputs.deps-file }}" ] && DEPS="--deps ${{ inputs.deps-file }}"
-        java -jar "$JAR" "${{ inputs.path }}" $DEPS > jvm-risk-report.md
+        ARGS=("${{ inputs.path }}")
+        [ -n "${{ inputs.deps-file }}" ] && ARGS+=(--deps "${{ inputs.deps-file }}")
+        [ "${{ inputs.sarif }}" = "true" ] && ARGS+=(--sarif-out jvm-risk.sarif)
+        [ -n "${{ inputs.fail-on }}" ] && ARGS+=(--fail-on "${{ inputs.fail-on }}")
+        # 한 번만 돈다. 리포트·SARIF·판정이 같은 조회 결과를 봐야 한다.
+        set +e
+        java -jar "$JAR" "${ARGS[@]}" > jvm-risk-report.md
+        RC=$?
+        set -e
         cat jvm-risk-report.md >> "$GITHUB_STEP_SUMMARY"
-        if [ "${{ inputs.sarif }}" = "true" ]; then java -jar "$JAR" "${{ inputs.path }}" $DEPS --sarif > jvm-risk.sarif; fi
-        if [ -n "${{ inputs.fail-on }}" ]; then java -jar "$JAR" "${{ inputs.path }}" $DEPS --fail-on "${{ inputs.fail-on }}" > /dev/null; fi
-    - if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+        echo "rc=$RC" >> "$GITHUB_OUTPUT"
+    - if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' }}
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
       # fork 에서 온 PR 은 GITHUB_TOKEN 이 읽기 전용이라 코멘트를 못 단다. 리포트는 이미 Step Summary 에 있으니 실패로 만들지 않는다.
       run: gh pr comment "${{ github.event.pull_request.number }}" --body-file jvm-risk-report.md || echo "::warning::PR 코멘트를 달지 못했습니다(fork PR 이면 정상). Step Summary 를 확인하세요."
+    - if: ${{ steps.scan.outputs.rc != '0' }}
+      shell: bash
+      run: |
+        echo "::error::fail-on ${{ inputs.fail-on }} 기준 초과(또는 판정 불능 UNKNOWN). 리포트는 PR 코멘트·Step Summary 참조"
+        exit 1
