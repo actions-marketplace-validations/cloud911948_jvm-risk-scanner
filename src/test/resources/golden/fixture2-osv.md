@@ -14,6 +14,10 @@
 ### [MEDIUM] EOL-SOON — spring-boot 4.0.7 — 119일 후 지원 종료 (2026-12-31)
 - 조치: 업그레이드 계획 수립
 
+### [MEDIUM] OSV-NETTY — netty (Boot BOM 관리) 4.2.15.Final: OSV 등재 취약점 1건 (MEDIUM 1) — 흔적 규칙 미정의
+- 버전만으로 판정(사용 조건 미확인): CVE-2026-75596(M)
+- 조치: 같은 라인 최신 4.2.17.Final 이상으로 올리면 일괄 해소. 낱개 확인은 https://osv.dev/list?ecosystem=Maven&q=io.netty:netty-handler
+
 ### [INFO] CVE-2026-59270 — spring-security (Boot BOM 관리) 7.0.6: 취약 버전이나 사용 흔적 없음 — 내장 UnboundID LDAP 서버가 잘 알려진 관리자 DN 을 무조건 등록하고 모든 인터페이스에 바인드
 - 조건: spring-security-ldap 의 내장(UnboundID) LDAP 서버 사용 시 — 소스·빌드·설정에서 관련 문자열 미발견(조건 미충족 추정). 찾은 흔적 문자열: UnboundIdContainer | spring-security-ldap | unboundid | ldap\.embedded | LdapServer
 - 조치: 버전 자체는 취약 범위. 업그레이드 시 함께 해소: 7.0.7, 7.1.1

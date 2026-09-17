@@ -1,5 +1,5 @@
 {
- "version": "2026-09-17.v6",
+ "version": "2026-09-17.v7",
  "note": "정본 규칙 셋. 출처 URL 은 각 항목에. v6(2026-09-17): JDK 27 GA 반영, Netty·Tomcat CVE 추가, boot_bom 에 netty 열, Security 라인 최신 패치 보강. 날짜는 endoflife.date·공식 JEP·spring.io·wiki index/java-spring-baseline.md 기준.",
  "jdk27_defaults": [
   {
@@ -539,9 +539,35 @@
     "<security-constraint>",
     "<auth-constraint>"
    ]
+  },
+  {
+   "id": "CVE-2016-1000027",
+   "product": "spring-framework",
+   "severity": "critical",
+   "cvss": 9.8,
+   "title": "Spring Framework HttpInvoker·RemoteInvocation 역직렬화 RCE — 5.3 라인은 수정 없음(6.0 에서 제거)",
+   "affected": [
+    [
+     "1.0.0",
+     "5.3.999"
+    ]
+   ],
+   "fixed": [
+    "6.0.0"
+   ],
+   "condition": "HttpInvokerServiceExporter / HttpInvokerProxyFactoryBean / RemoteInvocationSerializingExporter 로 Java 직렬화 원격 호출을 노출·사용할 때. Spring 은 5.3 에서 수정 대신 사용 중단 권고",
+   "published": "2020-01-02",
+   "source": "https://github.com/advisories/GHSA-4wrc-f8pq-fpqp",
+   "evidence": [
+    "HttpInvokerServiceExporter",
+    "HttpInvokerProxyFactoryBean",
+    "RemoteInvocationSerializingExporter",
+    "HessianServiceExporter",
+    "SimpleHttpInvokerRequestExecutor"
+   ]
   }
  ],
- "cve_note": "2026-08-20 Spring 91건 중 CVSS 9점대 2건 + Security HIGH 3건만 v1 수록. 나머지(Cloud Config·Data REST·AI·Gateway 등)는 v2. 브리핑 9/3 의 CVE 번호(59270·59285)는 spring.io/security 목록 페이지엔 미노출이나 HeroDevs·SecurityWeek 로 교차 확인. v6(9/17): Netty CVE-2026-75595(SNI mTLS 우회)·Tomcat CVE-2026-65182(security-constraint 순서) 추가 — wiki index/java-spring-baseline.md 9/9 수거분. \"Tomcat 10.1.58\" 은 존재하지 않는 버전.",
+ "cve_note": "2026-08-20 Spring 91건 중 CVSS 9점대 2건 + Security HIGH 3건만 v1 수록. 나머지(Cloud Config·Data REST·AI·Gateway 등)는 v2. 브리핑 9/3 의 CVE 번호(59270·59285)는 spring.io/security 목록 페이지엔 미노출이나 HeroDevs·SecurityWeek 로 교차 확인. v6(9/17): Netty CVE-2026-75595(SNI mTLS 우회)·Tomcat CVE-2026-65182(security-constraint 순서) 추가 — wiki index/java-spring-baseline.md 9/9 수거분. \"Tomcat 10.1.58\" 은 존재하지 않는 버전. v7(9/17): CVE-2016-1000027(HttpInvoker) 추가 — Framework 5.3 라인 OSV CRITICAL 의 정체. 흔적 없으면 INFO.",
  "boot_bom": {
   "4.1.0": {
    "spring-security": "7.1.0",

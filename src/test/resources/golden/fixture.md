@@ -1,7 +1,7 @@
 # JVM 런타임 리스크 리포트
 
 - 감지 JDK: 21 · 의존성: {spring-security=7.0.6, spring-graphql=2.0.4, jol=?, spring-boot=4.0.8, spring-framework=7.0.9, tomcat=11.0.24, netty=4.2.17.Final} · 이미지: [redis:8.2.7] · 플래그: 1개
-- 규칙 버전 2026-09-17.v6 · OSV 미조회(--offline) · EOL 표 rules.json
+- 규칙 버전 2026-09-17.v7 · OSV 미조회(--offline) · EOL 표 rules.json
 
 ### [CRITICAL] CVE-2026-59270 — spring-security 7.0.6: 내장 UnboundID LDAP 서버가 잘 알려진 관리자 DN 을 무조건 등록하고 모든 인터페이스에 바인드 (CVSS 9.4)
 - 조건: spring-security-ldap 의 내장(UnboundID) LDAP 서버 사용 시 — 사용 흔적: src/main/java/app/LdapCfg.java

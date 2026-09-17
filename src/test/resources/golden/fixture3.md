@@ -1,7 +1,7 @@
 # JVM 런타임 리스크 리포트
 
 - 감지 JDK: 17 · 의존성: {spring-boot=3.5.13, spring-security=6.5.9, spring-framework=6.2.17, spring-graphql=1.4.5, tomcat=10.1.52} · 이미지: 없음 · 플래그: 0개
-- 규칙 버전 2026-09-17.v6 · OSV 미조회(--offline) · EOL 표 rules.json
+- 규칙 버전 2026-09-17.v7 · OSV 미조회(--offline) · EOL 표 rules.json
 
 ### [HIGH] EOL-PAST — spring-boot 3.5.13 — 지원 종료됨 (2026-06-30)
 - 조치: 지원 중인 라인으로 업그레이드 (최신 3.5.16)

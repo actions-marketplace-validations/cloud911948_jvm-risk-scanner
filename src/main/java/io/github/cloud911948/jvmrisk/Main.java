@@ -72,18 +72,20 @@ public final class Main {
         if (!offline) {
             central = new Central();
             Osv osv = new Osv();
-            vulns = osv.queryProducts(facts.deps);
+            vulns = osv.queryProducts(facts.deps, facts.resolved);
             if (!facts.resolved.isEmpty()) {
-                java.util.Set<String> productCoords = new java.util.HashSet<>();
-                Osv.COORDS.values().forEach(productCoords::addAll); // 제품 라인에서 이미 물은 모듈은 전이에서 빼야 이중 계상이 없다
+                // 제품 그룹(org.springframework 등)에 속한 아티팩트는 제품 라인으로 갔으니 전이에서는 그 밖의 것만 본다.
                 Map<String, String> others = new java.util.LinkedHashMap<>();
-                facts.resolved.forEach((k, v) -> { if (!productCoords.contains(k) && !k.startsWith("org.springframework.security:")) others.put(k, v); });
+                facts.resolved.forEach((k, v) -> { if (Osv.productOfCoord(k) == null) others.put(k, v); });
                 facts.transitive.putAll(osv.queryCoords(others));
             }
             facts.osv = "조회 " + vulns.size() + "개 제품" + (facts.resolved.isEmpty() ? "" : " + 전이 " + facts.transitive.size() + "개 아티팩트")
+                    + (osv.cacheAgeDays() >= 0 ? " (조회 실패, " + osv.cacheAgeDays() + "일 전 캐시 기준)" : "")
                     + (osv.failed().isEmpty() ? "" : ", 실패 " + osv.failed().size() + "건");
-            osv.failed().stream().limit(5).forEach(x -> facts.unavailable.add("OSV: " + x));
-            if (osv.failed().size() > 5) facts.unavailable.add("OSV: 외 " + (osv.failed().size() - 5) + "건");
+            // 캐시로 판정했으면 UNKNOWN 이 아니다(나이는 리포트 머리에 있다). 캐시도 없을 때만 판정 불능.
+            List<String> hard = osv.failed().stream().filter(x -> !x.contains("캐시 기준") && !x.contains("마지막 성공 조회")).toList();
+            hard.stream().limit(5).forEach(x -> facts.unavailable.add("OSV: " + x));
+            if (hard.size() > 5) facts.unavailable.add("OSV: 외 " + (hard.size() - 5) + "건");
             Eol eol = new Eol();
             rules = new Rules(rules.version(), rules.jdk27Defaults(), eol.merge(rules.eol()), rules.eolWarnDays(), rules.cves(), rules.bootBom());
             facts.eolSrc = "endoflife.date" + (eol.failed().isEmpty() ? "" : "(실패 " + eol.failed() + " 는 rules.json)");

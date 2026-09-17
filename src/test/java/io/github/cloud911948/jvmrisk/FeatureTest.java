@@ -64,6 +64,13 @@ class FeatureTest {
     }
 
     @Test
+    void resolvedArtifactsOfAProductGroupAreNotTransitive() {
+        assertEquals("spring-framework", Osv.productOfCoord("org.springframework:spring-expression"));
+        assertEquals("tomcat", Osv.productOfCoord("org.apache.tomcat.embed:tomcat-embed-el"));
+        assertEquals(null, Osv.productOfCoord("org.yaml:snakeyaml")); // 이런 것만 전이 목록으로 간다
+    }
+
+    @Test
     void resolvedVersionBeatsBomEstimate() {
         Facts f = new Collector(RULES).collect(Path.of("fixture3")); // Boot 3.5.13 → security 6.5.9 (bom~)
         Collector.applyResolved(f, Map.of("org.springframework.security:spring-security-core", "6.5.11"));

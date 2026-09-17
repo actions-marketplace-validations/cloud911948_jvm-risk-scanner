@@ -42,29 +42,63 @@ public final class Osv {
             "tomcat", List.of("org.apache.tomcat.embed:tomcat-embed-core"),
             "netty", List.of("io.netty:netty-handler", "io.netty:netty-codec-http2"));
 
+    /** groupId → 제품. 해석 결과의 같은 그룹 아티팩트(spring-expression 등)를 제품 라인으로 보내 전이 목록과 이중 계상되지 않게 한다. */
+    static final Map<String, String> GROUP_OF = Map.of(
+            "org.springframework.boot", "spring-boot", "org.springframework", "spring-framework",
+            "org.springframework.security", "spring-security", "org.springframework.graphql", "spring-graphql",
+            "org.apache.tomcat.embed", "tomcat", "org.apache.tomcat", "tomcat", "io.netty", "netty");
+
+    static String productOfCoord(String coord) {
+        return GROUP_OF.get(coord.substring(0, coord.indexOf(':')));
+    }
+
     private static final int MAX_COORDS = 400;
+    private static final int CACHE_MAX_DAYS = 7;
+    private final java.nio.file.Path cacheFile = java.nio.file.Path.of(System.getProperty("user.home"), ".cache", "jvm-risk-scanner", "osv-last.json");
+    /** 마지막 성공 조회를 대신 쓴 경우 그 나이(일). -1 이면 캐시 미사용. */
+    private long cacheAgeDays = -1;
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final List<String> failed = new ArrayList<>();
 
-    /** product → version. 제품별 대표 아티팩트들로 묻고 제품 단위로 합친다(중복 id 제거). */
     public Map<String, List<Vuln>> queryProducts(Map<String, String> productVersions) {
+        return queryProducts(productVersions, Map.of());
+    }
+
+    /**
+     * product → version 에 해석 결과(group:artifact → version)를 더해 제품별로 묻고 제품 단위로 합친다(중복 id 제거).
+     * 해석 결과가 있으면 그 그룹의 아티팩트 전부를 그 제품으로 보낸다. 대표 아티팩트 이름 목록으로만 걸면 spring-expression 같은 것이 전이 쪽으로 샌다.
+     */
+    public Map<String, List<Vuln>> queryProducts(Map<String, String> productVersions, Map<String, String> resolved) {
+        Map<String, Set<String>> coordsByProduct = new LinkedHashMap<>();
         Map<String, String> coords = new LinkedHashMap<>();
         productVersions.forEach((product, version) -> {
             if (version == null || version.equals("?")) return;
-            for (String c : COORDS.getOrDefault(product, List.of())) coords.put(c, version);
+            for (String c : COORDS.getOrDefault(product, List.of())) {
+                coords.put(c, version);
+                coordsByProduct.computeIfAbsent(product, k -> new LinkedHashSet<>()).add(c);
+            }
+        });
+        resolved.forEach((coord, version) -> {
+            String product = productOfCoord(coord);
+            if (product != null && productVersions.containsKey(product)) {
+                coords.put(coord, version);
+                coordsByProduct.computeIfAbsent(product, k -> new LinkedHashSet<>()).add(coord);
+            }
         });
         Map<String, List<Vuln>> byCoord = queryCoords(coords);
         Map<String, List<Vuln>> out = new LinkedHashMap<>();
-        productVersions.forEach((product, version) -> {
+        coordsByProduct.forEach((product, cs) -> {
             Set<String> seen = new LinkedHashSet<>();
             List<Vuln> merged = new ArrayList<>();
-            for (String c : COORDS.getOrDefault(product, List.of())) {
-                for (Vuln v : byCoord.getOrDefault(c, List.of())) if (seen.add(v.id())) merged.add(v);
-            }
+            for (String c : cs) for (Vuln v : byCoord.getOrDefault(c, List.of())) if (seen.add(v.id())) merged.add(v);
             if (!merged.isEmpty()) out.put(product, merged);
         });
         return out;
+    }
+
+    public long cacheAgeDays() {
+        return cacheAgeDays;
     }
 
     /** group:artifact → version 을 받아 group:artifact → 취약점 목록. 실패하면 빈 맵 + failed 에 사유. */
@@ -89,7 +123,10 @@ public final class Osv {
             if (r.statusCode() != 200) throw new IllegalStateException("HTTP " + r.statusCode());
             results = MAPPER.readTree(r.body()).path("results");
         } catch (Exception e) {
-            failed.add("OSV querybatch 실패: " + e.getMessage());
+            // 일시 장애가 모든 PR 빌드를 죽이지 않게, 7일 이내의 마지막 성공 조회가 있으면 그것으로 판정하고 나이를 밝힌다. 그보다 오래됐으면 UNKNOWN.
+            Map<String, List<Vuln>> cached = readCache(coords);
+            if (cached != null) return cached;
+            failed.add("OSV querybatch 실패: " + e.getMessage() + " (7일 이내 캐시 없음)");
             return out;
         }
         // 응답이 요청보다 짧거나 페이지 분할이면 뒤쪽 좌표는 "0건" 이 아니라 "미조회" 다. 조용히 넘기지 않는다.
@@ -130,7 +167,50 @@ public final class Osv {
             List<Vuln> vs = ids.stream().map(got::get).filter(v -> v != null).toList();
             if (!vs.isEmpty()) out.put(coord, vs);
         });
+        writeCache(coords, out);
         return out;
+    }
+
+    /** 캐시 파일: {"at": epochSeconds, "entries": {"g:a@v": [Vuln...]}} */
+    private void writeCache(Map<String, String> coords, Map<String, List<Vuln>> out) {
+        try {
+            Map<String, Object> file = new LinkedHashMap<>();
+            Map<String, List<Vuln>> entries = new LinkedHashMap<>();
+            java.nio.file.Path p = cacheFile;
+            if (java.nio.file.Files.exists(p)) {
+                JsonNode old = MAPPER.readTree(p.toFile()).path("entries");
+                old.fields().forEachRemaining(e -> entries.put(e.getKey(), MAPPER.convertValue(e.getValue(), MAPPER.getTypeFactory().constructCollectionType(List.class, Vuln.class))));
+            }
+            coords.forEach((coord, v) -> entries.put(coord + "@" + v, out.getOrDefault(coord, List.of())));
+            file.put("at", java.time.Instant.now().getEpochSecond());
+            file.put("entries", entries);
+            java.nio.file.Files.createDirectories(p.getParent());
+            MAPPER.writeValue(p.toFile(), file);
+        } catch (Exception e) {
+            // 캐시는 있으면 좋은 것. 못 써도 스캔은 계속된다.
+        }
+    }
+
+    private Map<String, List<Vuln>> readCache(Map<String, String> coords) {
+        try {
+            if (!java.nio.file.Files.exists(cacheFile)) return null;
+            JsonNode root = MAPPER.readTree(cacheFile.toFile());
+            long ageDays = (java.time.Instant.now().getEpochSecond() - root.path("at").asLong()) / 86400;
+            if (ageDays > CACHE_MAX_DAYS) return null;
+            JsonNode entries = root.path("entries");
+            Map<String, List<Vuln>> out = new LinkedHashMap<>();
+            for (Map.Entry<String, String> e : coords.entrySet()) {
+                JsonNode hit = entries.get(e.getKey() + "@" + e.getValue());
+                if (hit == null) return null; // 하나라도 없으면 캐시로 판정하지 않는다
+                List<Vuln> vs = MAPPER.convertValue(hit, MAPPER.getTypeFactory().constructCollectionType(List.class, Vuln.class));
+                if (!vs.isEmpty()) out.put(e.getKey(), vs);
+            }
+            cacheAgeDays = ageDays;
+            failed.add("OSV 조회 실패 → " + ageDays + "일 전 마지막 성공 조회로 판정");
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public List<String> failed() {
