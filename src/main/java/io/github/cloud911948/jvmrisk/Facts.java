@@ -27,6 +27,8 @@ public final class Facts {
     /** CVE id → 사용 흔적이 발견된 파일(상대 경로, 최대 3개). */
     public final Map<String, List<String>> evidence = new LinkedHashMap<>();
     public boolean jfr;
+    /** 리포트 머리에 찍는 OSV 조회 상태. 판정엔 쓰지 않는다. */
+    public String osv = "미조회(--offline)";
 
     public Facts(Path root) {
         this.root = root;

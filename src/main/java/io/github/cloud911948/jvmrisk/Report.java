@@ -18,7 +18,7 @@ public final class Report {
                 .append(" · 의존성: ").append(f.deps.isEmpty() ? "없음" : f.deps)
                 .append(" · 이미지: ").append(f.images.isEmpty() ? "없음" : f.images)
                 .append(" · 플래그: ").append(f.flags.size()).append("개\n");
-        sb.append("- 규칙 버전 ").append(rules.version()).append("\n\n");
+        sb.append("- 규칙 버전 ").append(rules.version()).append(" · OSV ").append(f.osv).append("\n\n");
         for (Finding x : findings) {
             sb.append("### [").append(x.severity().toUpperCase()).append("] ").append(x.id()).append(" — ").append(x.title()).append('\n');
             if (x.detail() != null && !x.detail().isEmpty()) sb.append("- ").append(x.detail()).append('\n');

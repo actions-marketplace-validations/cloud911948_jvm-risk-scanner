@@ -15,10 +15,17 @@ public final class Evaluator {
 
     private final Rules rules;
     private final LocalDate today;
+    /** product → OSV 취약점. 오프라인이거나 조회 실패면 비어 있고, 그때는 rules.json 스냅샷만 본다. */
+    private final Map<String, List<Osv.Vuln>> osv;
 
     public Evaluator(Rules rules, LocalDate today) {
+        this(rules, today, Map.of());
+    }
+
+    public Evaluator(Rules rules, LocalDate today, Map<String, List<Osv.Vuln>> osv) {
         this.rules = rules;
         this.today = today;
+        this.osv = osv;
     }
 
     public List<Finding> evaluate(Facts f) {
@@ -95,10 +102,12 @@ public final class Evaluator {
         String tag = f.src.get(product);
         if ("bom".equals(tag)) label += " (Boot BOM 관리)";
         else if ("bom~".equals(tag)) label += " (Boot BOM 추정)";
+        java.util.Set<String> known = new java.util.HashSet<>();
         for (Rules.Cve c : rules.cves()) {
             if (!c.product().equals(product)) continue;
             boolean affected = c.affected().stream().anyMatch(r -> Version.inRange(version, r.get(0), r.get(1)));
             if (!affected) continue;
+            known.add(c.id());
             List<String> ev = f.evidence.getOrDefault(c.id(), List.of());
             String fixed = String.join(", ", c.fixed());
             if (!ev.isEmpty()) {
@@ -114,6 +123,29 @@ public final class Evaluator {
                         "버전 자체는 취약 범위. 업그레이드 시 함께 해소: " + fixed));
             }
         }
+        osvOnly(out, product, version, label, known);
+    }
+
+    /**
+     * OSV 에만 있는 항목(버전은 취약 범위, 흔적 규칙 없음)은 제품당 한 줄로 묶는다.
+     * 오래된 라인은 누적 CVE 가 수십 건이라 낱개로 찍으면 리포트가 읽히지 않고, 답은 어차피 "라인 업그레이드" 하나다.
+     * 버전만으로 CRITICAL 을 찍지 않고 MEDIUM 으로 "확인 필요"만 남긴다. 낱개 조건이 필요한 건은 rules.json 에 evidence 를 추가하면 위 경로로 올라온다.
+     */
+    private void osvOnly(List<Finding> out, String product, String version, String label, java.util.Set<String> known) {
+        List<Osv.Vuln> rest = osv.getOrDefault(product, List.of()).stream()
+                .filter(v -> !known.contains(v.cveId()) && v.aliases().stream().noneMatch(known::contains)).toList();
+        if (rest.isEmpty()) return;
+        Map<String, Long> bySev = rest.stream().collect(Collectors.groupingBy(Osv.Vuln::severity, java.util.LinkedHashMap::new, Collectors.counting()));
+        String counts = List.of("critical", "high", "medium", "low").stream().filter(bySev::containsKey)
+                .map(s -> s.toUpperCase() + " " + bySev.get(s)).collect(Collectors.joining(" · "));
+        String ids = rest.stream().map(v -> v.cveId() + "(" + v.severity().substring(0, 1).toUpperCase() + ")").collect(Collectors.joining(", "));
+        String line = Version.line(version);
+        String fix = rest.stream().flatMap(v -> v.fixed().stream()).filter(x -> Version.line(x).equals(line)).max(Version.ORDER)
+                .orElseGet(() -> rest.stream().flatMap(v -> v.fixed().stream()).max(Version.ORDER).orElse("미기재"));
+        out.add(new Finding("medium", "OSV-" + product.toUpperCase(),
+                label + " " + version + ": OSV 등재 취약점 " + rest.size() + "건 (" + counts + ") — 흔적 규칙 미정의",
+                "버전만으로 판정(사용 조건 미확인): " + ids,
+                "같은 라인 최신 " + fix + " 이상으로 올리면 일괄 해소. 낱개 확인은 https://osv.dev/list?ecosystem=Maven&q=" + Osv.COORDS.get(product)));
     }
 
     private void misc(Facts f, List<Finding> out) {

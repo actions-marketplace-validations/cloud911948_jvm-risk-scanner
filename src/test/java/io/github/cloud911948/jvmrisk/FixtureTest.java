@@ -95,6 +95,31 @@ class FixtureTest {
     }
 
     @Test
+    void osvOnlyVulnIsMediumAndKnownCveIsNotDuplicated() {
+        Facts f = collect("fixture2"); // Boot 4.0.7 → netty 4.2.15
+        java.util.Map<String, List<Osv.Vuln>> osv = java.util.Map.of("netty", List.of(
+                new Osv.Vuln("GHSA-c4c3-7fpv-j4q5", List.of("CVE-2026-75595"), "critical", "SNI bypass", List.of("4.2.17.Final"), "u1"),
+                new Osv.Vuln("GHSA-fccg-mwvh-qqg4", List.of("CVE-2026-75596"), "medium", "quadratic DoS", List.of("4.2.17.Final"), "u2")));
+        List<Finding> findings = new Evaluator(RULES, TODAY, osv).evaluate(f);
+        long n75595 = findings.stream().filter(x -> x.id().equals("CVE-2026-75595")).count();
+        Finding grouped = findings.stream().filter(x -> x.id().equals("OSV-NETTY")).findFirst().orElseThrow();
+        assertEquals(1, n75595);                                   // rules.json 이 아는 CVE 는 OSV 로 중복 생성하지 않는다
+        assertEquals("medium", grouped.severity());               // 흔적 규칙 없는 OSV 항목은 제품당 한 줄, MEDIUM
+        assertTrue(grouped.title().contains("1건") && grouped.detail().contains("CVE-2026-75596(M)"), grouped.detail());
+        assertTrue(grouped.action().contains("4.2.17.Final"), grouped.action());
+    }
+
+    @Test
+    void osvParseReadsAliasesFixedAndSeverity() {
+        String json = "{\"vulns\":[{\"id\":\"GHSA-x\",\"aliases\":[\"CVE-1\"],\"summary\":\"s\",\"database_specific\":{\"severity\":\"MODERATE\"},"
+                + "\"affected\":[{\"ranges\":[{\"events\":[{\"introduced\":\"0\"},{\"fixed\":\"1.2\"}]}]}]}]}";
+        Osv.Vuln v = Osv.parse(json).get(0);
+        assertEquals("CVE-1", v.cveId());
+        assertEquals(List.of("1.2"), v.fixed());
+        assertEquals("medium", v.severity());
+    }
+
+    @Test
     void versionCompareIgnoresQualifier() {
         assertTrue(Version.inRange("3.5.13-SNAPSHOT", "3.5.0", "3.5.13"));
         assertFalse(Version.inRange("7.0.7", "7.0.0", "7.0.6"));
