@@ -107,7 +107,8 @@
    "product": "spring-boot",
    "cycle": "2.7",
    "eol": "2023-11-24",
-   "latest": "2.7.18"
+   "latest": "2.7.18",
+   "note": "OSS 종료. Spring 공지 2023-11-24(연장), endoflife.date 2023-06-30 — 온라인 값을 쓰되 두 날짜 병기"
   },
   {
    "product": "spring-framework",
@@ -217,7 +218,7 @@
    "product": "spring-security",
    "cycle": "5.7",
    "eol": "2023-05-22",
-   "note": "Boot 2.7 관리 라인. OSS 종료, 상용 지원만",
+   "note": "Boot 2.7 관리 라인. OSS 종료, 상용 지원만 Spring 공지 2023-11-24(Boot 2.7 연장과 동일), endoflife.date 2023-06-30",
    "latest": "5.7.11"
   },
   {
