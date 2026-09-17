@@ -46,8 +46,9 @@ public final class Collector {
     private static final Pattern SECURITY_PROP = Pattern.compile("spring-security\\.version\\s*[=>]+\\s*['\"]?([\\d.]+)|<spring-security\\.version>([\\d.]+)");
     private static final Pattern GRAPHQL = Pattern.compile("spring-graphql[:\"'\\s]+([\\d.]+)|<spring-graphql\\.version>([\\d.]+)");
     private static final Pattern FRAMEWORK = Pattern.compile("org\\.springframework[:\"'\\s]+spring-(?:core|context|web)[:\"'\\s]+([\\d.]+)");
-    private static final Pattern NETTY = Pattern.compile("io\\.netty[:\"'\\s]+netty-(?:handler|all|codec-http2?|transport)[:\"'\\s]+([\\d.]+(?:\\.Final)?)|<netty\\.version>([\\d.]+(?:\\.Final)?)|netty\\.version\\s*[=:]\\s*['\"]?([\\d.]+(?:\\.Final)?)");
-    private static final Pattern TOMCAT = Pattern.compile("org\\.apache\\.tomcat(?:\\.embed)?[:\"'\\s]+tomcat-[\\w\\-]+[:\"'\\s]+([\\d.]+)|<tomcat\\.version>([\\d.]+)|tomcat\\.version\\s*[=:]\\s*['\"]?([\\d.]+)");
+    /** ext['tomcat.version'] = '9.0.102' 같은 Gradle ext 대괄호 꼴도 읽는다. 실측 저장소에서 이 한 줄을 놓쳐 9.0.65 로 추정했었다. */
+    private static final Pattern NETTY = Pattern.compile("io\\.netty[:\"'\\s]+netty-(?:handler|all|codec-http2?|transport)[:\"'\\s]+([\\d.]+(?:\\.Final)?)|<netty\\.version>([\\d.]+(?:\\.Final)?)|netty\\.version['\"\\]]*\\s*[=:]\\s*['\"]?([\\d.]+(?:\\.Final)?)");
+    private static final Pattern TOMCAT = Pattern.compile("org\\.apache\\.tomcat(?:\\.embed)?[:\"'\\s]+tomcat-[\\w\\-]+[:\"'\\s]+([\\d.]+)|<tomcat\\.version>([\\d.]+)|tomcat\\.version['\"\\]]*\\s*[=:]\\s*['\"]?([\\d.]+)");
     private static final Pattern IMAGE = Pattern.compile("(?:image:|FROM)\\s+(redis|tomcat)[:\\s]+v?([\\d.]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern UNSAFE = Pattern.compile("sun\\.misc\\.Unsafe|jdk\\.internal\\.misc\\.Unsafe");
 

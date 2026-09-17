@@ -56,6 +56,14 @@ class FeatureTest {
     }
 
     @Test
+    void gradleExtBracketOverrideIsRead() throws Exception {
+        Path tmp = Files.createTempDirectory("jvmrisk");
+        Files.writeString(tmp.resolve("build.gradle"), "plugins { id 'org.springframework.boot' version '2.7.18' }\next['tomcat.version'] = '9.0.102'\n");
+        Facts f = new Collector(RULES).collect(tmp);
+        assertEquals("9.0.102", f.deps.get("tomcat")); // BOM 표(9.0.83)가 아니라 ext 오버라이드
+    }
+
+    @Test
     void resolvedVersionBeatsBomEstimate() {
         Facts f = new Collector(RULES).collect(Path.of("fixture3")); // Boot 3.5.13 → security 6.5.9 (bom~)
         Collector.applyResolved(f, Map.of("org.springframework.security:spring-security-core", "6.5.11"));
