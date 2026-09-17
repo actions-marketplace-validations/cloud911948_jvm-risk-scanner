@@ -3,7 +3,7 @@ name: jvm-risk
 on:
   pull_request:
   schedule:
-    - cron: "0 22 * * 0"   # 매주 월요일 07:00 KST. PR 이 없는 휴면 저장소도 새 CVE 를 놓치지 않게
+    - cron: "0 22 * * 0"   # 매주 월요일 07:00 KST
 permissions: { contents: read, pull-requests: write, security-events: write }
 jobs:
   scan:
@@ -12,13 +12,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "21" }
-      # 선택: 실제 해석 버전과 전이 의존성까지 보려면 트리를 먼저 뽑는다
-      - run: ./gradlew -q dependencies --configuration runtimeClasspath > deps.txt || true
+      # OSV 마지막 성공 조회 캐시. 일시 장애 때 7일 이내 캐시로 판정하고 나이를 리포트에 적는다.
+      - uses: actions/cache@v4
+        with: { path: ~/.cache/jvm-risk-scanner, key: jvm-risk-osv-${{ github.run_id }}, restore-keys: jvm-risk-osv- }
+      # 선택: 실제 해석 버전과 전이 의존성까지 보려면 트리를 먼저 뽑는다(배포 모듈 기준)
+      - run: ./gradlew -q :app:dependencies --configuration runtimeClasspath > deps.txt || true
       - uses: cloud911948/jvm-risk-scanner@main
         with:
           deps-file: deps.txt
           sarif: "true"
           fail-on: high          # 비우면 리포트만
-      # 선택: Security 탭·PR 파일 뷰에 표시
       - uses: github/codeql-action/upload-sarif@v3
         with: { sarif_file: jvm-risk.sarif }
+
+  # 휴면 저장소는 자기 schedule 이 60일 무활동으로 자동 꺼진다(공개 저장소 기준). 활동 있는 저장소의 크론에 얹어 같이 스캔한다.
+  dormant:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { repository: your-org/dormant-repo, token: ${{ secrets.DORMANT_REPO_TOKEN }}, path: dormant }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: cloud911948/jvm-risk-scanner@main
+        with: { path: dormant, comment: "false", fail-on: high }

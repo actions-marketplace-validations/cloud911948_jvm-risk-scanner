@@ -60,7 +60,9 @@ EOL-PAST spring-boot until=2026-11-30     # 4분기 라인 이동 착수 예정
 
 ### 판정 결과와 판정 불능은 다릅니다
 
-OSV·endoflife.date·Maven Central 조회가 실패하면 그 사실을 `SCAN-UNKNOWN` 항목(심각도 `unknown`, HIGH 바로 아래)으로 리포트에 남깁니다. 네트워크 오류로 응답이 비었는데 "취약점 0건"으로 읽히는 것이 조용한 오류 중 최악이기 때문입니다. `--fail-on` 은 어떤 기준이든 UNKNOWN 을 실패로 봅니다. 스냅샷만으로 보려면 `--offline` 입니다. PR 이 없는 휴면 저장소는 스캐너가 돌지 않으니 [example/jvm-risk.yml](example/jvm-risk.yml) 처럼 `schedule:` 을 붙이십시오.
+OSV·endoflife.date·Maven Central 조회가 실패하면 그 사실을 `SCAN-UNKNOWN` 항목(심각도 `unknown`, HIGH 바로 아래)으로 리포트에 남깁니다. 네트워크 오류로 응답이 비었는데 "취약점 0건"으로 읽히는 것이 조용한 오류 중 최악이기 때문입니다. `--fail-on` 은 어떤 기준이든 UNKNOWN 을 실패로 봅니다.
+
+다만 OSV 의 일시 장애가 모든 PR 을 깨지 않도록 마지막 성공 조회를 `~/.cache/jvm-risk-scanner/osv-last.json` 에 보관합니다. 조회가 실패하면 7일 이내의 캐시로 판정하고 리포트 머리에 "N일 전 캐시 기준"이라고 적으며, 그보다 오래됐을 때만 UNKNOWN 입니다. CI 에서는 [example/jvm-risk.yml](example/jvm-risk.yml) 처럼 `actions/cache` 로 그 디렉터리를 유지하십시오. 스냅샷만으로 보려면 `--offline` 입니다. PR 이 없는 휴면 저장소는 스캐너가 돌지 않습니다. 그 저장소 자신에 `schedule:` 을 걸어도 GitHub 은 공개 저장소에서 60일 무활동이면 스케줄을 자동으로 끄므로, [example/jvm-risk.yml](example/jvm-risk.yml) 의 `dormant` 잡처럼 활동 있는 저장소의 크론에서 체크아웃해 같이 스캔하십시오.
 
 ## 무엇을 보나
 
@@ -80,7 +82,7 @@ OSV·endoflife.date·Maven Central 조회가 실패하면 그 사실을 `SCAN-UN
 
 ### 취약 버전 범위는 OSV 에서, 사용 조건은 규칙 파일에서
 
-스캔할 때마다 감지한 의존성으로 [OSV.dev](https://osv.dev) 를 조회합니다. Spring Security 처럼 모듈별로 CVE 가 등재되는 제품은 core·web·config·ldap·oauth2 를 함께 묻고, `--deps` 가 있으면 전이 의존성 전체를 한 번의 배치 조회로 묻습니다. 그래서 규칙 파일을 갱신하지 않아도 새 CVE 의 버전 범위와 수정 버전은 최신입니다. 네트워크가 막히면 규칙 파일의 스냅샷만 쓰고 리포트 머리에 그 사실을 적습니다. `--offline` 으로 조회를 끌 수 있습니다.
+스캔할 때마다 감지한 의존성으로 [OSV.dev](https://osv.dev) 를 조회합니다. Spring Security 처럼 모듈별로 CVE 가 등재되는 제품은 core·web·config·ldap·oauth2 를 함께 묻고, `--deps` 가 있으면 해석된 아티팩트 중 제품 그룹(`org.springframework` 등)에 속한 것은 그 제품 라인으로 보내고, 나머지만 전이 의존성으로 한 번의 배치 조회로 묻습니다. 이름 목록으로 걸면 spring-expression 같은 것이 전이 쪽으로 새어 이중 계상됩니다. 그래서 규칙 파일을 갱신하지 않아도 새 CVE 의 버전 범위와 수정 버전은 최신입니다. 네트워크가 막히면 규칙 파일의 스냅샷만 쓰고 리포트 머리에 그 사실을 적습니다. `--offline` 으로 조회를 끌 수 있습니다.
 
 OSV 에는 있지만 규칙 파일에 사용 흔적 정의가 없는 CVE 는 **제품당 한 줄로 묶어 MEDIUM** 으로 냅니다. Boot 2.7 라인의 Tomcat 9.0.65 는 OSV 등재 취약점이 40건인데, 낱개로 찍으면 리포트가 읽히지 않고 답은 어차피 라인 업그레이드 하나이기 때문입니다. 낱개 판정이 필요한 건은 규칙 파일에 흔적을 정의하면 위의 흔적 판정 경로로 올라옵니다.
 
@@ -99,7 +101,7 @@ OSV 가 다 아는 것은 아닙니다. Spring 이 2026-08-20 에 공개한 Secu
 - 빌드 파일을 정규식으로 읽습니다. Gradle·Maven 파서를 쓰지 않는 것은 의도입니다. DSL 변형마다 파서가 깨지는 것보다 못 찾으면 "미확인"으로 남기는 쪽이 운영에서 덜 위험했습니다.
 - JEP 534 는 깨지는 도구 목록을 제공하지 않습니다. `Unsafe`·JOL·lincheck·javaagent 항목은 "확인 필요" 신호이지 확정 판정이 아닙니다.
 - `--deps` 없이 돌리면 전이 의존성은 보지 않습니다. 빌드 파일에 이름이 나오는 것만 봅니다.
-- 취약점 데이터 소스가 사실상 OSV 하나입니다. 규칙 파일 스냅샷이 공백을 메우지만 두 번째 온라인 소스(GHSA 직접 조회)는 다음 버전 항목입니다.
+- 취약점 데이터 소스가 사실상 OSV 하나입니다. GHSA 는 OSV 의 주 공급원이라 두 번째 소스가 되지 못하고, 독립성이 있는 건 벤더 권고문(Spring·Tomcat 보안 페이지·NVD)입니다. 규칙 파일이 그 역할을 손으로 하고 있고, 구조적 수집은 다음 버전 항목입니다.
 - 빌드 파일 정규식은 부류의 문제입니다. `ext['tomcat.version']` 을 고쳐도 Kotlin DSL 의 `extra[...]`, 버전 카탈로그, `resolutionStrategy.force` 같은 변형이 남습니다. 방향은 정규식을 늘리는 게 아니라 SBOM(CycloneDX) 입력으로 옮기는 것이고, 다음 버전 항목입니다.
 - 멀티모듈에서 "저장소당 대표 버전" 은 배포되지 않는 모듈의 낡은 버전이 리포트를 오염시킬 수 있습니다. 판정 단위를 배포 아티팩트의 classpath 로 바꾸는 것도 다음 버전 항목입니다.
 - 사용 흔적 검색은 문자열 매칭입니다. 서드파티 라이브러리가 같은 이름을 쓰면 오탐이 납니다. WebAuthn 규칙이 Yubico 구현을 잡았던 사례가 있어 Spring Security 전용 심볼로 좁혔습니다.
@@ -113,7 +115,7 @@ OSV 가 다 아는 것은 아닙니다. Spring 이 2026-08-20 에 공개한 Secu
 ./gradlew fatJar                        # build/libs/jvm-risk-scanner.jar
 ```
 
-픽스처별 오프라인 리포트 전체를 `src/test/resources/golden/` 에 고정합니다. 정규식이나 흔적 정의를 고쳤을 때 다른 판정이 움직이면 diff 로 드러납니다. 낱개 픽스처를 흔적 정의마다 늘리는 것보다 유지비가 쌉니다.
+픽스처별 오프라인 리포트 전체를 `src/test/resources/golden/` 에 고정합니다. 온라인 경로는 녹화해 둔 OSV 응답(`src/test/resources/osv/`)을 스텁으로 넣어 따로 고정합니다. 골든 파일이 실시간 OSV 를 보면 새 CVE 등재마다 코드 변경 없이 깨져 신호 가치가 죽습니다. 정규식이나 흔적 정의를 고쳤을 때 다른 판정이 움직이면 diff 로 드러납니다. 낱개 픽스처를 흔적 정의마다 늘리는 것보다 유지비가 쌉니다.
 
 구조는 `Collector`(사실 수집, `DepTree` 가 해석 출력 파싱) → `Osv`·`Eol`·`Central`(온라인 조회) → `Evaluator`(규칙·OSV 대조) → `Ignore`(억제) → `Report`(마크다운·JSON·SARIF)이고, `Rules` 가 JSON 을 타입으로 읽습니다. 수집기는 판단하지 않고 평가기는 파일도 네트워크도 만지지 않습니다.
 
