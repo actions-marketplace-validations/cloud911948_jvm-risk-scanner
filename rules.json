@@ -1,610 +1,709 @@
 {
-  "version": "2026-09-03.v5",
-  "note": "정본 규칙 셋. 출처 URL 은 각 항목에. 날짜는 endoflife.date API(2026-09-03 조회)·공식 JEP·spring.io 권고 기준.",
-  "jdk27_defaults": [
-    {
-      "id": "JDK27-GC-DEFAULT",
-      "title": "JDK 27 부터 모든 환경에서 G1 이 기본 GC (JEP 523)",
-      "trigger": "GC 플래그 미지정 AND (컨테이너/소형 인스턴스 추정: CPU 1개 또는 메모리 < 1792MB 환경일 가능성)",
-      "why": "JDK 26 까지는 CPU 1개 또는 물리 메모리 1792MB 미만이면 Serial GC 가 자동 선택됐다. 27 부터 같은 환경에서 G1 로 바뀌므로 힙 사용량·시작 시간·처리량 특성이 바뀐다.",
-      "action": "스테이징에서 GC 로그(-Xlog:gc*) 비교. 소형 컨테이너에서 Serial 이 더 낫다면 -XX:+UseSerialGC 를 명시.",
-      "severity": "medium",
-      "source": "https://openjdk.org/jeps/523"
-    },
-    {
-      "id": "JDK27-GC-EXPLICIT",
-      "title": "GC 를 명시하고 있어 JEP 523 영향 없음 (정보)",
-      "trigger": "-XX:+UseSerialGC | -XX:+UseParallelGC | -XX:+UseZGC | -XX:+UseShenandoahGC | -XX:+UseG1GC 중 하나 존재",
-      "why": "명시 선택은 27 에서도 그대로 유지된다. 단 Parallel/Serial 을 관성으로 쓰고 있다면 G1 개선분(처리량·지연·메모리)을 재평가할 기회.",
-      "action": "없음. 선택 근거가 문서화돼 있는지만 확인.",
-      "severity": "info",
-      "source": "https://openjdk.org/jeps/523"
-    },
-    {
-      "id": "JDK27-COH-DEFAULT",
-      "title": "JDK 27 부터 압축 객체 헤더가 기본 (JEP 534) — 힙 10~22% 감소, 객체 레이아웃 변경",
-      "trigger": "타깃 JDK 27 이상 AND -XX:-UseCompactObjectHeaders 미지정",
-      "why": "객체 헤더가 96→64비트. 힙은 줄지만 객체 레이아웃을 직접 읽는 도구·라이브러리(Unsafe 오프셋 계산, JOL, 일부 JVMTI/네이티브 에이전트, lincheck)가 깨지거나 크래시할 수 있다.",
-      "action": "아래 JDK27-COH-* 규칙에 걸리는 항목이 있으면 스테이징에서 먼저 검증. 문제 시 -XX:-UseCompactObjectHeaders 로 이전 레이아웃 유지(비권장, 임시).",
-      "severity": "medium",
-      "source": "https://openjdk.org/jeps/534"
-    },
-    {
-      "id": "JDK27-COH-UNSAFE",
-      "title": "sun.misc.Unsafe / jdk.internal.misc.Unsafe 직접 사용 — 압축 객체 헤더와 충돌 위험",
-      "trigger": "소스 또는 의존성 힌트에 sun.misc.Unsafe 사용",
-      "why": "objectFieldOffset·arrayBaseOffset 등 헤더 크기를 가정한 오프셋 계산이 어긋나면 메모리 손상·크래시.",
-      "action": "Unsafe 사용처를 VarHandle/MemorySegment 로 이전하거나, 해당 라이브러리의 JDK 25+ 호환 버전 확인.",
-      "severity": "high",
-      "source": "https://github.com/JetBrains/lincheck/issues/915"
-    },
-    {
-      "id": "JDK27-COH-LAYOUT-TOOLS",
-      "title": "객체 레이아웃 의존 도구 감지 (JOL, lincheck)",
-      "trigger": "의존성에 org.openjdk.jol 또는 org.jetbrains.kotlinx:lincheck",
-      "why": "레이아웃 변경으로 결과가 달라지거나 실행 실패.",
-      "action": "도구 최신 버전이 압축 헤더를 지원하는지 확인. 테스트 전용이면 -XX:-UseCompactObjectHeaders 로 테스트 JVM 만 분리.",
-      "severity": "medium",
-      "source": "https://github.com/JetBrains/lincheck/issues/915"
-    },
-    {
-      "id": "JDK27-COH-AGENT",
-      "title": "-javaagent / -agentpath 사용 — 네이티브·JVMTI 에이전트의 압축 헤더 호환 확인",
-      "trigger": "JVM 옵션에 -javaagent: 또는 -agentpath: 또는 -agentlib:",
-      "why": "APM(예: 일부 상용 에이전트)·프로파일러가 객체 헤더를 직접 읽으면 오동작. JEP 는 구체 도구 목록을 제공하지 않으므로 벤더 호환표를 직접 확인해야 한다.",
-      "action": "에이전트 벤더의 'JDK 25/26/27 compact object headers' 지원 문서 확인. 미확인이면 스테이징에서 에이전트 켠 채로 부하 테스트.",
-      "severity": "medium",
-      "source": "https://openjdk.org/jeps/534"
-    },
-    {
-      "id": "JDK27-JFR-REDACT",
-      "title": "JFR 민감정보 자동 마스킹 (JDK 27)",
-      "trigger": "JFR 사용 흔적(-XX:StartFlightRecording | jcmd JFR | .jfc 파일)",
-      "why": "JFR 기록에서 민감 값이 자동 마스킹되므로, JFR 을 파싱해 값을 읽던 내부 도구가 다른 출력을 받는다.",
-      "action": "JFR 파서·대시보드가 마스킹된 필드에 의존하는지 확인.",
-      "severity": "low",
-      "source": "https://www.infoq.com/news/2026/08/java-27-so-far/"
-    }
-  ],
-  "eol": [
-    {
-      "product": "spring-boot",
-      "cycle": "4.1",
-      "eol": "2027-07-31",
-      "latest": "4.1.1"
-    },
-    {
-      "product": "spring-boot",
-      "cycle": "4.0",
-      "eol": "2026-12-31",
-      "latest": "4.0.8"
-    },
-    {
-      "product": "spring-boot",
-      "cycle": "3.5",
-      "eol": "2026-06-30",
-      "latest": "3.5.16"
-    },
-    {
-      "product": "spring-boot",
-      "cycle": "3.4",
-      "eol": "2025-12-31",
-      "latest": "3.4.13"
-    },
-    {
-      "product": "spring-boot",
-      "cycle": "3.3",
-      "eol": "2025-06-30",
-      "latest": "3.3.13"
-    },
-    {
-      "product": "spring-boot",
-      "cycle": "3.2",
-      "eol": "2024-12-31",
-      "latest": "3.2.12"
-    },
-    {
-      "product": "spring-boot",
-      "cycle": "2.7",
-      "eol": "2023-11-24",
-      "latest": "2.7.18"
-    },
-    {
-      "product": "spring-framework",
-      "cycle": "7.0",
-      "eol": "2027-07-31",
-      "latest": "7.0.9"
-    },
-    {
-      "product": "spring-framework",
-      "cycle": "6.2",
-      "eol": "2026-06-30",
-      "latest": "6.2.19"
-    },
-    {
-      "product": "spring-framework",
-      "cycle": "6.1",
-      "eol": "2025-06-30",
-      "latest": "6.1.21"
-    },
-    {
-      "product": "spring-framework",
-      "cycle": "5.3",
-      "eol": "2024-08-31",
-      "latest": "5.3.39"
-    },
-    {
-      "product": "jdk",
-      "cycle": "26",
-      "eol": "2026-09-18",
-      "note": "비LTS. JDK 27 GA(2026-09-15) 직후 종료"
-    },
-    {
-      "product": "jdk",
-      "cycle": "25",
-      "eol": "2030-09-30",
-      "lts": true
-    },
-    {
-      "product": "jdk",
-      "cycle": "21",
-      "eol": "2028-09-30",
-      "lts": true
-    },
-    {
-      "product": "jdk",
-      "cycle": "17",
-      "eol": "2026-09-30",
-      "lts": true,
-      "note": "Oracle Premier 종료 기준(Extended 는 2029-09). 배포판별 상이 — Temurin 17 은 2027-10 예정"
-    },
-    {
-      "product": "jdk",
-      "cycle": "11",
-      "eol": "2026-09-30",
-      "lts": true,
-      "note": "Oracle Extended 종료(2026-09). Temurin 11 은 2027-10 예정"
-    },
-    {
-      "product": "graalvm-oracle",
-      "cycle": "17",
-      "eol": "2026-09-30",
-      "note": "dev 브리핑 9/3 기준. 공식 캘린더엔 EOL 표 없음 → Oracle 지원 문서로 재확인 필요"
-    },
-    {
-      "product": "redis",
-      "cycle": "8.0",
-      "eol": "2026-12-01",
-      "latest": "8.0.6"
-    },
-    {
-      "product": "redis",
-      "cycle": "8.2",
-      "eol": "2030-09-01",
-      "latest": "8.2.9"
-    },
-    {
-      "product": "redis",
-      "cycle": "7.4",
-      "eol": "2029-12-01",
-      "latest": "7.4.11"
-    },
-    {
-      "product": "redis",
-      "cycle": "7.2",
-      "eol": "2029-12-01",
-      "latest": "7.2.16"
-    },
-    {
-      "product": "tomcat",
-      "cycle": "9.0",
-      "eol": "2027-03-31",
-      "latest": "9.0.121"
-    },
-    {
-      "product": "tomcat",
-      "cycle": "10.0",
-      "eol": "2022-10-31"
-    },
-    {
-      "product": "tomcat",
-      "cycle": "8.5",
-      "eol": "2024-03-31"
-    },
-    {
-      "product": "spring-security",
-      "cycle": "5.7",
-      "eol": "2023-05-22",
-      "note": "Boot 2.7 관리 라인. OSS 종료, 상용 지원만"
-    },
-    {
-      "product": "spring-security",
-      "cycle": "5.8",
-      "eol": "2024-06-30"
-    },
-    {
-      "product": "spring-security",
-      "cycle": "6.5",
-      "eol": "2026-06-30",
-      "note": "Boot 3.5 관리 라인. 2026-08-20 CVE OSS 수정 없음"
-    },
-    {
-      "product": "spring-security",
-      "cycle": "7.0",
-      "eol": "2027-07-31",
-      "latest": "7.0.7"
-    }
-  ],
-  "eol_source": "https://endoflife.date (API 2026-09-03), JDK 17/11·GraalVM 은 배포판별 상이해 note 참조",
-  "eol_warn_days": 120,
-  "cves": [
-    {
-      "id": "CVE-2026-59270",
-      "product": "spring-security",
-      "severity": "critical",
-      "cvss": 9.4,
-      "title": "내장 UnboundID LDAP 서버가 잘 알려진 관리자 DN 을 무조건 등록하고 모든 인터페이스에 바인드",
-      "affected": [
-        [
-          "5.7.0",
-          "6.5.11"
-        ],
-        [
-          "7.0.0",
-          "7.0.6"
-        ],
-        [
-          "7.1.0",
-          "7.1.0"
-        ]
-      ],
-      "fixed": [
-        "7.0.7",
-        "7.1.1"
-      ],
-      "condition": "spring-security-ldap 의 내장(UnboundID) LDAP 서버 사용 시",
-      "published": "2026-08-20",
-      "source": "https://www.herodevs.com/blog-posts/cve-2026-59270-spring-security-embedded-ldap-admin-dn-exposure",
-      "evidence": [
-        "UnboundIdContainer",
-        "spring-security-ldap",
-        "unboundid",
-        "ldap\\.embedded",
-        "LdapServer"
-      ]
-    },
-    {
-      "id": "CVE-2026-59285",
-      "product": "spring-graphql",
-      "severity": "critical",
-      "cvss": 9.2,
-      "title": "Spring for GraphQL 안전하지 않은 역직렬화 → RCE (Jackson 2.x + 페이지네이션 필드)",
-      "affected": [
-        [
-          "2.0.0",
-          "2.0.4"
-        ]
-      ],
-      "fixed": [
-        "2.0.5"
-      ],
-      "condition": "Jackson 2.x 로 역직렬화하고 페이지네이션 GraphQL 필드 노출 시",
-      "published": "2026-08-20",
-      "source": "https://securityonline.info/spring-graphql-vulnerabilities/",
-      "evidence": [
-        "spring-graphql",
-        "spring-boot-starter-graphql",
-        "@SchemaMapping",
-        "ScrollSubrange",
-        "Window<"
-      ]
-    },
-    {
-      "id": "CVE-2026-41707",
-      "product": "spring-security",
-      "severity": "high",
-      "cvss": null,
-      "title": "DPoPProofJwtDecoderFactory DPoP proof 재사용(캐시 축출로 리플레이)",
-      "affected": [
-        [
-          "6.5.0",
-          "6.5.11"
-        ],
-        [
-          "7.0.0",
-          "7.0.6"
-        ],
-        [
-          "7.1.0",
-          "7.1.0"
-        ]
-      ],
-      "fixed": [
-        "7.0.7",
-        "7.1.1"
-      ],
-      "condition": "OAuth2 리소스 서버에서 DPoP 사용 시",
-      "published": "2026-08-20",
-      "source": "https://spring.io/security/cve-2026-41707",
-      "evidence": [
-        "DPoPProofJwtDecoderFactory",
-        "\\.dpop\\(",
-        "DPoP"
-      ]
-    },
-    {
-      "id": "CVE-2026-47841",
-      "product": "spring-security",
-      "severity": "high",
-      "cvss": null,
-      "title": "WebAuthn userVerification=REQUIRED 가 분산 세션 역직렬화 후 우회됨",
-      "affected": [
-        [
-          "6.4.0",
-          "6.4.18"
-        ],
-        [
-          "6.5.0",
-          "6.5.11"
-        ],
-        [
-          "7.0.0",
-          "7.0.6"
-        ],
-        [
-          "7.1.0",
-          "7.1.0"
-        ]
-      ],
-      "fixed": [
-        "7.0.7",
-        "7.1.1"
-      ],
-      "condition": "WebAuthn + 분산 세션 저장소(Redis/JDBC/Hazelcast)",
-      "published": "2026-08-20",
-      "source": "https://spring.io/security/cve-2026-47841",
-      "evidence": [
-        "springframework\\.security\\.web\\.webauthn",
-        "\\.webAuthn\\(",
-        "WebAuthnConfigurer",
-        "spring-security-webauthn"
-      ],
-      "evidence_note": "Yubico webauthn-server-core·webauthn4j 등 서드파티 패스키 구현은 대상 아님 — Spring Security 자체 WebAuthn DSL 만"
-    },
-    {
-      "id": "CVE-2026-47877",
-      "product": "spring-security",
-      "severity": "high",
-      "cvss": null,
-      "title": "Authorization Server 기본 동의 페이지 XSS",
-      "affected": [
-        [
-          "7.0.0",
-          "7.0.6"
-        ],
-        [
-          "7.1.0",
-          "7.1.0"
-        ]
-      ],
-      "fixed": [
-        "7.0.7",
-        "7.1.1"
-      ],
-      "condition": "Authorization Server 기본 동의 페이지 사용 시(커스텀 페이지는 무관)",
-      "published": "2026-08-20",
-      "source": "https://spring.io/security/cve-2026-47877",
-      "evidence": [
-        "spring-security-oauth2-authorization-server",
-        "OAuth2AuthorizationServerConfigurer",
-        "authorization-server"
-      ]
-    },
-    {
-      "id": "CVE-2026-81934",
-      "product": "redis-server",
-      "severity": "high",
-      "cvss": 7.5,
-      "title": "TLS pending-data 처리 use-after-free → 인증된 공격자 RCE (초기 NVD 9.8, Redis 재평가 7.5)",
-      "affected": [
-        [
-          "8.2.0",
-          "8.2.8"
-        ],
-        [
-          "8.4.0",
-          "8.4.5"
-        ],
-        [
-          "8.6.0",
-          "8.6.5"
-        ],
-        [
-          "8.8.0",
-          "8.8.1"
-        ],
-        [
-          "8.10.0",
-          "8.10.0"
-        ]
-      ],
-      "fixed": [
-        "8.2.9",
-        "8.4.6",
-        "8.6.6",
-        "8.8.2",
-        "8.10.1"
-      ],
-      "condition": "Redis 서버가 TLS 활성화 시",
-      "published": "2026-08-27",
-      "source": "https://redis.io/blog/security-advisory-cve-2026-81934/",
-      "evidence": [
-        "tls-port",
-        "--tls-port",
-        "tls_port",
-        "rediss://"
-      ]
-    }
-  ],
-  "cve_note": "2026-08-20 Spring 91건 중 CVSS 9점대 2건 + Security HIGH 3건만 v1 수록. 나머지(Cloud Config·Data REST·AI·Gateway 등)는 v2. 브리핑 9/3 의 CVE 번호(59270·59285)는 spring.io/security 목록 페이지엔 미노출이나 HeroDevs·SecurityWeek 로 교차 확인.",
-  "boot_bom": {
-    "4.1.0": {
-      "spring-security": "7.1.0",
-      "spring-framework": "7.0.8",
-      "spring-graphql": "2.0.4",
-      "tomcat": "11.0.22"
-    },
-    "4.1.1": {
-      "spring-security": "7.1.1",
-      "spring-framework": "7.0.9",
-      "spring-graphql": "2.0.5",
-      "tomcat": "11.0.24"
-    },
-    "4.0.0": {
-      "spring-security": "7.0.0",
-      "spring-framework": "7.0.1",
-      "spring-graphql": "2.0.0",
-      "tomcat": "11.0.14"
-    },
-    "4.0.1": {
-      "spring-security": "7.0.2",
-      "spring-framework": "7.0.2",
-      "spring-graphql": "2.0.1",
-      "tomcat": "11.0.15"
-    },
-    "4.0.2": {
-      "spring-security": "7.0.2",
-      "spring-framework": "7.0.3",
-      "spring-graphql": "2.0.2",
-      "tomcat": "11.0.15"
-    },
-    "4.0.3": {
-      "spring-security": "7.0.3",
-      "spring-framework": "7.0.5",
-      "spring-graphql": "2.0.2",
-      "tomcat": "11.0.18"
-    },
-    "4.0.4": {
-      "spring-security": "7.0.4",
-      "spring-framework": "7.0.6",
-      "spring-graphql": "2.0.2",
-      "tomcat": "11.0.18"
-    },
-    "4.0.5": {
-      "spring-security": "7.0.4",
-      "spring-framework": "7.0.6",
-      "spring-graphql": "2.0.2",
-      "tomcat": "11.0.20"
-    },
-    "4.0.6": {
-      "spring-security": "7.0.5",
-      "spring-framework": "7.0.7",
-      "spring-graphql": "2.0.3",
-      "tomcat": "11.0.21"
-    },
-    "4.0.7": {
-      "spring-security": "7.0.6",
-      "spring-framework": "7.0.8",
-      "spring-graphql": "2.0.4",
-      "tomcat": "11.0.22"
-    },
-    "4.0.8": {
-      "spring-security": "7.0.7",
-      "spring-framework": "7.0.9",
-      "spring-graphql": "2.0.5",
-      "tomcat": "11.0.24"
-    },
-    "3.5.0": {
-      "spring-security": "6.5.0",
-      "spring-framework": "6.2.7",
-      "spring-graphql": "1.4.0",
-      "tomcat": "10.1.41"
-    },
-    "3.5.4": {
-      "spring-security": "6.5.2",
-      "spring-framework": "6.2.9",
-      "spring-graphql": "1.4.1",
-      "tomcat": "10.1.43"
-    },
-    "3.5.8": {
-      "spring-security": "6.5.7",
-      "spring-framework": "6.2.14",
-      "spring-graphql": "1.4.3",
-      "tomcat": "10.1.49"
-    },
-    "3.5.12": {
-      "spring-security": "6.5.9",
-      "spring-framework": "6.2.17",
-      "spring-graphql": "1.4.5",
-      "tomcat": "10.1.52"
-    },
-    "3.5.14": {
-      "spring-security": "6.5.10",
-      "spring-framework": "6.2.18",
-      "spring-graphql": "1.4.5",
-      "tomcat": "10.1.54"
-    },
-    "3.5.15": {
-      "spring-security": "6.5.11",
-      "spring-framework": "6.2.19",
-      "spring-graphql": "1.4.6",
-      "tomcat": "10.1.55"
-    },
-    "3.5.16": {
-      "spring-security": "6.5.11",
-      "spring-framework": "6.2.19",
-      "spring-graphql": "1.4.6",
-      "tomcat": "10.1.55"
-    },
-    "3.4.0": {
-      "spring-security": "6.4.1",
-      "spring-framework": "6.2.0",
-      "spring-graphql": "1.3.3",
-      "tomcat": "10.1.33"
-    },
-    "3.4.5": {
-      "spring-security": "6.4.5",
-      "spring-framework": "6.2.6",
-      "spring-graphql": "1.3.5",
-      "tomcat": "10.1.40"
-    },
-    "3.4.10": {
-      "spring-security": "6.4.11",
-      "spring-framework": "6.2.11",
-      "spring-graphql": "1.3.6",
-      "tomcat": "10.1.46"
-    },
-    "3.4.12": {
-      "spring-security": "6.4.13",
-      "spring-framework": "6.2.14",
-      "spring-graphql": "1.3.6",
-      "tomcat": "10.1.49"
-    },
-    "3.4.13": {
-      "spring-security": "6.4.13",
-      "spring-framework": "6.2.15",
-      "spring-graphql": "1.3.7",
-      "tomcat": "10.1.50"
-    },
-    "2.7.18": {
-      "spring-security": "5.7.11",
-      "spring-framework": "5.3.31",
-      "spring-graphql": "1.0.6",
-      "tomcat": "9.0.83"
-    },
-    "2.7.3": {
-      "spring-security": "5.7.3",
-      "spring-framework": "5.3.22",
-      "spring-graphql": "1.0.1",
-      "tomcat": "9.0.65"
-    },
-    "3.5.7": {
-      "spring-security": "6.5.6",
-      "spring-framework": "6.2.12",
-      "spring-graphql": "1.4.3",
-      "tomcat": "10.1.48"
-    }
+ "version": "2026-09-17.v6",
+ "note": "정본 규칙 셋. 출처 URL 은 각 항목에. v6(2026-09-17): JDK 27 GA 반영, Netty·Tomcat CVE 추가, boot_bom 에 netty 열, Security 라인 최신 패치 보강. 날짜는 endoflife.date·공식 JEP·spring.io·wiki index/java-spring-baseline.md 기준.",
+ "jdk27_defaults": [
+  {
+   "id": "JDK27-GC-DEFAULT",
+   "title": "JDK 27 부터 모든 환경에서 G1 이 기본 GC (JEP 523)",
+   "trigger": "GC 플래그 미지정 AND (컨테이너/소형 인스턴스 추정: CPU 1개 또는 메모리 < 1792MB 환경일 가능성)",
+   "why": "JDK 26 까지는 CPU 1개 또는 물리 메모리 1792MB 미만이면 Serial GC 가 자동 선택됐다. 27 부터 같은 환경에서 G1 로 바뀌므로 힙 사용량·시작 시간·처리량 특성이 바뀐다.",
+   "action": "스테이징에서 GC 로그(-Xlog:gc*) 비교. 소형 컨테이너에서 Serial 이 더 낫다면 -XX:+UseSerialGC 를 명시.",
+   "severity": "medium",
+   "source": "https://openjdk.org/jeps/523"
   },
-  "boot_bom_note": "spring-boot-dependencies POM 의 <spring-security.version> 등 직접 추출(Maven Central, 2026-09-03). 표에 없는 패치 버전은 같은 minor 의 가장 가까운 아래 버전으로 '추정' 표기. 주의: Boot 4.0.7 → Security 7.0.6(취약), 4.0.8 → 7.0.7(수정). Boot 3.5.16 → Security 6.5.11 은 OSS 수정 없음(3.5 라인 2026-06-30 EOL).",
-  "cve_evidence_note": "evidence: 소스·빌드·설정 파일에서 이 문자열이 하나도 없으면 '사용 흔적 없음'으로 심각도를 info 로 내린다(버전은 취약해도 조건 미충족 추정). 흔적이 있으면 원래 심각도 + 발견 파일 표시."
+  {
+   "id": "JDK27-GC-EXPLICIT",
+   "title": "GC 를 명시하고 있어 JEP 523 영향 없음 (정보)",
+   "trigger": "-XX:+UseSerialGC | -XX:+UseParallelGC | -XX:+UseZGC | -XX:+UseShenandoahGC | -XX:+UseG1GC 중 하나 존재",
+   "why": "명시 선택은 27 에서도 그대로 유지된다. 단 Parallel/Serial 을 관성으로 쓰고 있다면 G1 개선분(처리량·지연·메모리)을 재평가할 기회.",
+   "action": "없음. 선택 근거가 문서화돼 있는지만 확인.",
+   "severity": "info",
+   "source": "https://openjdk.org/jeps/523"
+  },
+  {
+   "id": "JDK27-COH-DEFAULT",
+   "title": "JDK 27 부터 압축 객체 헤더가 기본 (JEP 534) — 힙 10~22% 감소, 객체 레이아웃 변경",
+   "trigger": "타깃 JDK 27 이상 AND -XX:-UseCompactObjectHeaders 미지정",
+   "why": "객체 헤더가 96→64비트. 힙은 줄지만 객체 레이아웃을 직접 읽는 도구·라이브러리(Unsafe 오프셋 계산, JOL, 일부 JVMTI/네이티브 에이전트, lincheck)가 깨지거나 크래시할 수 있다.",
+   "action": "아래 JDK27-COH-* 규칙에 걸리는 항목이 있으면 스테이징에서 먼저 검증. 문제 시 -XX:-UseCompactObjectHeaders 로 이전 레이아웃 유지(비권장, 임시).",
+   "severity": "medium",
+   "source": "https://openjdk.org/jeps/534"
+  },
+  {
+   "id": "JDK27-COH-UNSAFE",
+   "title": "sun.misc.Unsafe / jdk.internal.misc.Unsafe 직접 사용 — 압축 객체 헤더와 충돌 위험",
+   "trigger": "소스 또는 의존성 힌트에 sun.misc.Unsafe 사용",
+   "why": "objectFieldOffset·arrayBaseOffset 등 헤더 크기를 가정한 오프셋 계산이 어긋나면 메모리 손상·크래시.",
+   "action": "Unsafe 사용처를 VarHandle/MemorySegment 로 이전하거나, 해당 라이브러리의 JDK 25+ 호환 버전 확인.",
+   "severity": "high",
+   "source": "https://github.com/JetBrains/lincheck/issues/915"
+  },
+  {
+   "id": "JDK27-COH-LAYOUT-TOOLS",
+   "title": "객체 레이아웃 의존 도구 감지 (JOL, lincheck)",
+   "trigger": "의존성에 org.openjdk.jol 또는 org.jetbrains.kotlinx:lincheck",
+   "why": "레이아웃 변경으로 결과가 달라지거나 실행 실패.",
+   "action": "도구 최신 버전이 압축 헤더를 지원하는지 확인. 테스트 전용이면 -XX:-UseCompactObjectHeaders 로 테스트 JVM 만 분리.",
+   "severity": "medium",
+   "source": "https://github.com/JetBrains/lincheck/issues/915"
+  },
+  {
+   "id": "JDK27-COH-AGENT",
+   "title": "-javaagent / -agentpath 사용 — 네이티브·JVMTI 에이전트의 압축 헤더 호환 확인",
+   "trigger": "JVM 옵션에 -javaagent: 또는 -agentpath: 또는 -agentlib:",
+   "why": "APM(예: 일부 상용 에이전트)·프로파일러가 객체 헤더를 직접 읽으면 오동작. JEP 는 구체 도구 목록을 제공하지 않으므로 벤더 호환표를 직접 확인해야 한다.",
+   "action": "에이전트 벤더의 'JDK 25/26/27 compact object headers' 지원 문서 확인. 미확인이면 스테이징에서 에이전트 켠 채로 부하 테스트.",
+   "severity": "medium",
+   "source": "https://openjdk.org/jeps/534"
+  },
+  {
+   "id": "JDK27-JFR-REDACT",
+   "title": "JFR 민감정보 자동 마스킹 (JEP 536, JDK 27)",
+   "trigger": "JFR 사용 흔적(-XX:StartFlightRecording | jcmd JFR | .jfc 파일)",
+   "why": "JFR 기록에서 민감 값이 자동 마스킹되므로, JFR 을 파싱해 값을 읽던 내부 도구가 다른 출력을 받는다.",
+   "action": "JFR 파서·대시보드가 마스킹된 필드에 의존하는지 확인.",
+   "severity": "low",
+   "source": "https://openjdk.org/jeps/536"
+  }
+ ],
+ "eol": [
+  {
+   "product": "spring-boot",
+   "cycle": "4.1",
+   "eol": "2027-07-31",
+   "latest": "4.1.1"
+  },
+  {
+   "product": "spring-boot",
+   "cycle": "4.0",
+   "eol": "2026-12-31",
+   "latest": "4.0.8"
+  },
+  {
+   "product": "spring-boot",
+   "cycle": "3.5",
+   "eol": "2026-06-30",
+   "latest": "3.5.16"
+  },
+  {
+   "product": "spring-boot",
+   "cycle": "3.4",
+   "eol": "2025-12-31",
+   "latest": "3.4.13"
+  },
+  {
+   "product": "spring-boot",
+   "cycle": "3.3",
+   "eol": "2025-06-30",
+   "latest": "3.3.13"
+  },
+  {
+   "product": "spring-boot",
+   "cycle": "3.2",
+   "eol": "2024-12-31",
+   "latest": "3.2.12"
+  },
+  {
+   "product": "spring-boot",
+   "cycle": "2.7",
+   "eol": "2023-11-24",
+   "latest": "2.7.18"
+  },
+  {
+   "product": "spring-framework",
+   "cycle": "7.0",
+   "eol": "2027-07-31",
+   "latest": "7.0.9"
+  },
+  {
+   "product": "spring-framework",
+   "cycle": "6.2",
+   "eol": "2026-06-30",
+   "latest": "6.2.19"
+  },
+  {
+   "product": "spring-framework",
+   "cycle": "6.1",
+   "eol": "2025-06-30",
+   "latest": "6.1.21"
+  },
+  {
+   "product": "spring-framework",
+   "cycle": "5.3",
+   "eol": "2024-08-31",
+   "latest": "5.3.39"
+  },
+  {
+   "product": "jdk",
+   "cycle": "26",
+   "eol": "2026-09-15",
+   "note": "비LTS. Temurin 26 종료 2026-09-15, Oracle 09-18, Corretto 10-31 — 배포판별 상이"
+  },
+  {
+   "product": "jdk",
+   "cycle": "25",
+   "eol": "2030-09-30",
+   "lts": true
+  },
+  {
+   "product": "jdk",
+   "cycle": "21",
+   "eol": "2028-09-30",
+   "lts": true,
+   "note": "Oracle NFTC 무상 라이선스는 2026-09-16 종료(이후 OTN 유료). Temurin 등 OpenJDK 배포판은 무관"
+  },
+  {
+   "product": "jdk",
+   "cycle": "17",
+   "eol": "2026-09-30",
+   "lts": true,
+   "note": "Oracle Premier 종료 기준(Extended 는 2029-09). 배포판별 상이 — Temurin 17 은 2027-10 예정"
+  },
+  {
+   "product": "jdk",
+   "cycle": "11",
+   "eol": "2026-09-30",
+   "lts": true,
+   "note": "Oracle Extended 종료(2026-09). Temurin 11 은 2027-10 예정"
+  },
+  {
+   "product": "graalvm-oracle",
+   "cycle": "17",
+   "eol": "2026-09-30",
+   "note": "dev 브리핑 9/3 기준. 공식 캘린더엔 EOL 표 없음 → Oracle 지원 문서로 재확인 필요"
+  },
+  {
+   "product": "redis",
+   "cycle": "8.0",
+   "eol": "2026-12-01",
+   "latest": "8.0.6"
+  },
+  {
+   "product": "redis",
+   "cycle": "8.2",
+   "eol": "2030-09-01",
+   "latest": "8.2.9"
+  },
+  {
+   "product": "redis",
+   "cycle": "7.4",
+   "eol": "2029-12-01",
+   "latest": "7.4.11"
+  },
+  {
+   "product": "redis",
+   "cycle": "7.2",
+   "eol": "2029-12-01",
+   "latest": "7.2.16"
+  },
+  {
+   "product": "tomcat",
+   "cycle": "9.0",
+   "eol": "2027-03-31",
+   "latest": "9.0.121",
+   "note": "CVE-2026-65182 수정 9.0.121"
+  },
+  {
+   "product": "tomcat",
+   "cycle": "10.0",
+   "eol": "2022-10-31"
+  },
+  {
+   "product": "tomcat",
+   "cycle": "8.5",
+   "eol": "2024-03-31"
+  },
+  {
+   "product": "spring-security",
+   "cycle": "5.7",
+   "eol": "2023-05-22",
+   "note": "Boot 2.7 관리 라인. OSS 종료, 상용 지원만",
+   "latest": "5.7.11"
+  },
+  {
+   "product": "spring-security",
+   "cycle": "5.8",
+   "eol": "2024-06-30",
+   "latest": "5.8.16"
+  },
+  {
+   "product": "spring-security",
+   "cycle": "6.5",
+   "eol": "2026-06-30",
+   "note": "Boot 3.5 관리 라인. 2026-08-20 CVE OSS 수정 없음",
+   "latest": "6.5.11"
+  },
+  {
+   "product": "spring-security",
+   "cycle": "7.0",
+   "eol": "2027-07-31",
+   "latest": "7.0.7"
+  },
+  {
+   "product": "jdk",
+   "cycle": "27",
+   "eol": "2027-03-16",
+   "note": "비LTS. 2026-09-15 GA. JDK 28 GA(2027-03 예정) 시 종료 — 정확한 일자는 28 GA 확정 후 갱신"
+  },
+  {
+   "product": "spring-security",
+   "cycle": "7.1",
+   "eol": "2027-07-31",
+   "latest": "7.1.1",
+   "note": "Boot 4.1 관리 라인"
+  },
+  {
+   "product": "tomcat",
+   "cycle": "10.1",
+   "eol": null,
+   "latest": "10.1.59",
+   "note": "Boot 3.x 관리 라인. 공식 EOL 미공표. CVE-2026-65182 수정 10.1.59 (10.1.58 은 존재하지 않음)"
+  },
+  {
+   "product": "tomcat",
+   "cycle": "11.0",
+   "eol": null,
+   "latest": "11.0.25",
+   "note": "Boot 4.x 관리 라인. 공식 EOL 미공표. CVE-2026-65182 수정 11.0.25 — Boot 4.1.1/4.0.8 BOM 은 11.0.24 라 오버라이드 필요"
+  }
+ ],
+ "eol_source": "https://endoflife.date (API 2026-09-03), JDK 17/11·GraalVM 은 배포판별 상이해 note 참조",
+ "eol_warn_days": 120,
+ "cves": [
+  {
+   "id": "CVE-2026-59270",
+   "product": "spring-security",
+   "severity": "critical",
+   "cvss": 9.4,
+   "title": "내장 UnboundID LDAP 서버가 잘 알려진 관리자 DN 을 무조건 등록하고 모든 인터페이스에 바인드",
+   "affected": [
+    [
+     "5.7.0",
+     "6.5.11"
+    ],
+    [
+     "7.0.0",
+     "7.0.6"
+    ],
+    [
+     "7.1.0",
+     "7.1.0"
+    ]
+   ],
+   "fixed": [
+    "7.0.7",
+    "7.1.1"
+   ],
+   "condition": "spring-security-ldap 의 내장(UnboundID) LDAP 서버 사용 시",
+   "published": "2026-08-20",
+   "source": "https://www.herodevs.com/blog-posts/cve-2026-59270-spring-security-embedded-ldap-admin-dn-exposure",
+   "evidence": [
+    "UnboundIdContainer",
+    "spring-security-ldap",
+    "unboundid",
+    "ldap\\.embedded",
+    "LdapServer"
+   ]
+  },
+  {
+   "id": "CVE-2026-59285",
+   "product": "spring-graphql",
+   "severity": "critical",
+   "cvss": 9.2,
+   "title": "Spring for GraphQL 안전하지 않은 역직렬화 → RCE (Jackson 2.x + 페이지네이션 필드)",
+   "affected": [
+    [
+     "2.0.0",
+     "2.0.4"
+    ]
+   ],
+   "fixed": [
+    "2.0.5"
+   ],
+   "condition": "Jackson 2.x 로 역직렬화하고 페이지네이션 GraphQL 필드 노출 시",
+   "published": "2026-08-20",
+   "source": "https://securityonline.info/spring-graphql-vulnerabilities/",
+   "evidence": [
+    "spring-graphql",
+    "spring-boot-starter-graphql",
+    "@SchemaMapping",
+    "ScrollSubrange",
+    "Window<"
+   ]
+  },
+  {
+   "id": "CVE-2026-41707",
+   "product": "spring-security",
+   "severity": "high",
+   "cvss": null,
+   "title": "DPoPProofJwtDecoderFactory DPoP proof 재사용(캐시 축출로 리플레이)",
+   "affected": [
+    [
+     "6.5.0",
+     "6.5.11"
+    ],
+    [
+     "7.0.0",
+     "7.0.6"
+    ],
+    [
+     "7.1.0",
+     "7.1.0"
+    ]
+   ],
+   "fixed": [
+    "7.0.7",
+    "7.1.1"
+   ],
+   "condition": "OAuth2 리소스 서버에서 DPoP 사용 시",
+   "published": "2026-08-20",
+   "source": "https://spring.io/security/cve-2026-41707",
+   "evidence": [
+    "DPoPProofJwtDecoderFactory",
+    "\\.dpop\\(",
+    "DPoP"
+   ]
+  },
+  {
+   "id": "CVE-2026-47841",
+   "product": "spring-security",
+   "severity": "high",
+   "cvss": null,
+   "title": "WebAuthn userVerification=REQUIRED 가 분산 세션 역직렬화 후 우회됨",
+   "affected": [
+    [
+     "6.4.0",
+     "6.4.18"
+    ],
+    [
+     "6.5.0",
+     "6.5.11"
+    ],
+    [
+     "7.0.0",
+     "7.0.6"
+    ],
+    [
+     "7.1.0",
+     "7.1.0"
+    ]
+   ],
+   "fixed": [
+    "7.0.7",
+    "7.1.1"
+   ],
+   "condition": "WebAuthn + 분산 세션 저장소(Redis/JDBC/Hazelcast)",
+   "published": "2026-08-20",
+   "source": "https://spring.io/security/cve-2026-47841",
+   "evidence": [
+    "springframework\\.security\\.web\\.webauthn",
+    "\\.webAuthn\\(",
+    "WebAuthnConfigurer",
+    "spring-security-webauthn"
+   ],
+   "evidence_note": "Yubico webauthn-server-core·webauthn4j 등 서드파티 패스키 구현은 대상 아님 — Spring Security 자체 WebAuthn DSL 만"
+  },
+  {
+   "id": "CVE-2026-47877",
+   "product": "spring-security",
+   "severity": "high",
+   "cvss": null,
+   "title": "Authorization Server 기본 동의 페이지 XSS",
+   "affected": [
+    [
+     "7.0.0",
+     "7.0.6"
+    ],
+    [
+     "7.1.0",
+     "7.1.0"
+    ]
+   ],
+   "fixed": [
+    "7.0.7",
+    "7.1.1"
+   ],
+   "condition": "Authorization Server 기본 동의 페이지 사용 시(커스텀 페이지는 무관)",
+   "published": "2026-08-20",
+   "source": "https://spring.io/security/cve-2026-47877",
+   "evidence": [
+    "spring-security-oauth2-authorization-server",
+    "OAuth2AuthorizationServerConfigurer",
+    "authorization-server"
+   ]
+  },
+  {
+   "id": "CVE-2026-81934",
+   "product": "redis-server",
+   "severity": "high",
+   "cvss": 7.5,
+   "title": "TLS pending-data 처리 use-after-free → 인증된 공격자 RCE (초기 NVD 9.8, Redis 재평가 7.5)",
+   "affected": [
+    [
+     "8.2.0",
+     "8.2.8"
+    ],
+    [
+     "8.4.0",
+     "8.4.5"
+    ],
+    [
+     "8.6.0",
+     "8.6.5"
+    ],
+    [
+     "8.8.0",
+     "8.8.1"
+    ],
+    [
+     "8.10.0",
+     "8.10.0"
+    ]
+   ],
+   "fixed": [
+    "8.2.9",
+    "8.4.6",
+    "8.6.6",
+    "8.8.2",
+    "8.10.1"
+   ],
+   "condition": "Redis 서버가 TLS 활성화 시",
+   "published": "2026-08-27",
+   "source": "https://redis.io/blog/security-advisory-cve-2026-81934/",
+   "evidence": [
+    "tls-port",
+    "--tls-port",
+    "tls_port",
+    "rediss://"
+   ]
+  },
+  {
+   "id": "CVE-2026-75595",
+   "product": "netty",
+   "severity": "critical",
+   "cvss": 9.1,
+   "title": "Netty SslClientHelloHandler 가 단편화된 ClientHello 의 SNI 를 잘못 읽어 SNI 별 mTLS(clientAuth=REQUIRE) 우회",
+   "affected": [
+    [
+     "4.2.0",
+     "4.2.16"
+    ],
+    [
+     "4.1.0",
+     "4.1.136"
+    ]
+   ],
+   "fixed": [
+    "4.2.17.Final",
+    "4.1.137.Final"
+   ],
+   "condition": "Netty 기반 게이트웨이(Spring Cloud Gateway·Reactor Netty·gRPC)에서 SNI 별 SslContext 로 mTLS 를 나눠 강제하고, 기본/폴백 SslContext 가 clientAuth=NONE/OPTIONAL 일 때",
+   "published": "2026-09-08",
+   "source": "https://github.com/netty/netty/security/advisories/GHSA-c4c3-7fpv-j4q5",
+   "evidence": [
+    "SniHandler",
+    "SslClientHelloHandler",
+    "ClientAuth\\.REQUIRE",
+    "clientAuth\\s*[=(]\\s*[\"']?REQUIRE"
+   ]
+  },
+  {
+   "id": "CVE-2026-65182",
+   "product": "tomcat",
+   "severity": "critical",
+   "cvss": 9.1,
+   "title": "Tomcat 보안 제약(security-constraint) 우회 — web.xml 에서 긴 경로 제약이 짧은 하위 경로의 더 엄격한 제약보다 먼저 선언될 때 미인증 접근",
+   "affected": [
+    [
+     "11.0.0",
+     "11.0.24"
+    ],
+    [
+     "10.1.0",
+     "10.1.57"
+    ],
+    [
+     "9.0.0",
+     "9.0.120"
+    ]
+   ],
+   "fixed": [
+    "11.0.25",
+    "10.1.59",
+    "9.0.121"
+   ],
+   "condition": "web.xml 에 <security-constraint> 를 직접 선언한 경우. Spring Security 만 쓰면 미발동",
+   "published": "2026-08-25",
+   "source": "https://tomcat.apache.org/security-11.html",
+   "evidence": [
+    "<security-constraint>",
+    "<auth-constraint>"
+   ]
+  }
+ ],
+ "cve_note": "2026-08-20 Spring 91건 중 CVSS 9점대 2건 + Security HIGH 3건만 v1 수록. 나머지(Cloud Config·Data REST·AI·Gateway 등)는 v2. 브리핑 9/3 의 CVE 번호(59270·59285)는 spring.io/security 목록 페이지엔 미노출이나 HeroDevs·SecurityWeek 로 교차 확인. v6(9/17): Netty CVE-2026-75595(SNI mTLS 우회)·Tomcat CVE-2026-65182(security-constraint 순서) 추가 — wiki index/java-spring-baseline.md 9/9 수거분. \"Tomcat 10.1.58\" 은 존재하지 않는 버전.",
+ "boot_bom": {
+  "4.1.0": {
+   "spring-security": "7.1.0",
+   "spring-framework": "7.0.8",
+   "spring-graphql": "2.0.4",
+   "tomcat": "11.0.22",
+   "netty": "4.2.15.Final"
+  },
+  "4.1.1": {
+   "spring-security": "7.1.1",
+   "spring-framework": "7.0.9",
+   "spring-graphql": "2.0.5",
+   "tomcat": "11.0.24",
+   "netty": "4.2.17.Final"
+  },
+  "4.0.0": {
+   "spring-security": "7.0.0",
+   "spring-framework": "7.0.1",
+   "spring-graphql": "2.0.0",
+   "tomcat": "11.0.14"
+  },
+  "4.0.1": {
+   "spring-security": "7.0.2",
+   "spring-framework": "7.0.2",
+   "spring-graphql": "2.0.1",
+   "tomcat": "11.0.15"
+  },
+  "4.0.2": {
+   "spring-security": "7.0.2",
+   "spring-framework": "7.0.3",
+   "spring-graphql": "2.0.2",
+   "tomcat": "11.0.15"
+  },
+  "4.0.3": {
+   "spring-security": "7.0.3",
+   "spring-framework": "7.0.5",
+   "spring-graphql": "2.0.2",
+   "tomcat": "11.0.18"
+  },
+  "4.0.4": {
+   "spring-security": "7.0.4",
+   "spring-framework": "7.0.6",
+   "spring-graphql": "2.0.2",
+   "tomcat": "11.0.18"
+  },
+  "4.0.5": {
+   "spring-security": "7.0.4",
+   "spring-framework": "7.0.6",
+   "spring-graphql": "2.0.2",
+   "tomcat": "11.0.20"
+  },
+  "4.0.6": {
+   "spring-security": "7.0.5",
+   "spring-framework": "7.0.7",
+   "spring-graphql": "2.0.3",
+   "tomcat": "11.0.21"
+  },
+  "4.0.7": {
+   "spring-security": "7.0.6",
+   "spring-framework": "7.0.8",
+   "spring-graphql": "2.0.4",
+   "tomcat": "11.0.22",
+   "netty": "4.2.15.Final"
+  },
+  "4.0.8": {
+   "spring-security": "7.0.7",
+   "spring-framework": "7.0.9",
+   "spring-graphql": "2.0.5",
+   "tomcat": "11.0.24",
+   "netty": "4.2.17.Final"
+  },
+  "3.5.0": {
+   "spring-security": "6.5.0",
+   "spring-framework": "6.2.7",
+   "spring-graphql": "1.4.0",
+   "tomcat": "10.1.41"
+  },
+  "3.5.4": {
+   "spring-security": "6.5.2",
+   "spring-framework": "6.2.9",
+   "spring-graphql": "1.4.1",
+   "tomcat": "10.1.43"
+  },
+  "3.5.8": {
+   "spring-security": "6.5.7",
+   "spring-framework": "6.2.14",
+   "spring-graphql": "1.4.3",
+   "tomcat": "10.1.49"
+  },
+  "3.5.12": {
+   "spring-security": "6.5.9",
+   "spring-framework": "6.2.17",
+   "spring-graphql": "1.4.5",
+   "tomcat": "10.1.52"
+  },
+  "3.5.14": {
+   "spring-security": "6.5.10",
+   "spring-framework": "6.2.18",
+   "spring-graphql": "1.4.5",
+   "tomcat": "10.1.54"
+  },
+  "3.5.15": {
+   "spring-security": "6.5.11",
+   "spring-framework": "6.2.19",
+   "spring-graphql": "1.4.6",
+   "tomcat": "10.1.55"
+  },
+  "3.5.16": {
+   "spring-security": "6.5.11",
+   "spring-framework": "6.2.19",
+   "spring-graphql": "1.4.6",
+   "tomcat": "10.1.55"
+  },
+  "3.4.0": {
+   "spring-security": "6.4.1",
+   "spring-framework": "6.2.0",
+   "spring-graphql": "1.3.3",
+   "tomcat": "10.1.33"
+  },
+  "3.4.5": {
+   "spring-security": "6.4.5",
+   "spring-framework": "6.2.6",
+   "spring-graphql": "1.3.5",
+   "tomcat": "10.1.40"
+  },
+  "3.4.10": {
+   "spring-security": "6.4.11",
+   "spring-framework": "6.2.11",
+   "spring-graphql": "1.3.6",
+   "tomcat": "10.1.46"
+  },
+  "3.4.12": {
+   "spring-security": "6.4.13",
+   "spring-framework": "6.2.14",
+   "spring-graphql": "1.3.6",
+   "tomcat": "10.1.49"
+  },
+  "3.4.13": {
+   "spring-security": "6.4.13",
+   "spring-framework": "6.2.15",
+   "spring-graphql": "1.3.7",
+   "tomcat": "10.1.50"
+  },
+  "2.7.18": {
+   "spring-security": "5.7.11",
+   "spring-framework": "5.3.31",
+   "spring-graphql": "1.0.6",
+   "tomcat": "9.0.83"
+  },
+  "2.7.3": {
+   "spring-security": "5.7.3",
+   "spring-framework": "5.3.22",
+   "spring-graphql": "1.0.1",
+   "tomcat": "9.0.65"
+  },
+  "3.5.7": {
+   "spring-security": "6.5.6",
+   "spring-framework": "6.2.12",
+   "spring-graphql": "1.4.3",
+   "tomcat": "10.1.48"
+  }
+ },
+ "boot_bom_note": "spring-boot-dependencies POM 의 <spring-security.version> 등 직접 추출(Maven Central, 2026-09-03). 표에 없는 패치 버전은 같은 minor 의 가장 가까운 아래 버전으로 '추정' 표기. 주의: Boot 4.0.7 → Security 7.0.6(취약), 4.0.8 → 7.0.7(수정). Boot 3.5.16 → Security 6.5.11 은 OSS 수정 없음(3.5 라인 2026-06-30 EOL). v6: netty 열은 4.0.7/4.0.8/4.1.0/4.1.1 만(9/9 브리핑이 BOM 직접 파싱). 나머지 행은 netty 미기재 → Netty CVE 는 명시 의존성이 있을 때만 판정.",
+ "cve_evidence_note": "evidence: 소스·빌드·설정 파일에서 이 문자열이 하나도 없으면 '사용 흔적 없음'으로 심각도를 info 로 내린다(버전은 취약해도 조건 미충족 추정). 흔적이 있으면 원래 심각도 + 발견 파일 표시."
 }
