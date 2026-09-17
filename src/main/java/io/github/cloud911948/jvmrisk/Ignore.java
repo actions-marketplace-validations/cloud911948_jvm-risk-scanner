@@ -44,7 +44,13 @@ public final class Ignore {
                     ig.invalid.add(raw.strip() + "  ← until=YYYY-MM-DD 와 # 사유 가 모두 필요");
                     continue;
                 }
-                java.time.LocalDate until = java.time.LocalDate.parse(m.group(1));
+                java.time.LocalDate until;
+                try {
+                    until = java.time.LocalDate.parse(m.group(1));
+                } catch (java.time.format.DateTimeParseException e) {
+                    ig.invalid.add(raw.strip() + "  ← 달력에 없는 날짜: " + m.group(1));
+                    continue;
+                }
                 String head = line.substring(0, m.start()).strip();
                 int sp = head.indexOf(' ');
                 Rule r = sp < 0 ? new Rule(head, "", until, reason) : new Rule(head.substring(0, sp), head.substring(sp + 1).strip(), until, reason);

@@ -84,36 +84,48 @@ public final class Osv {
         body.append("]}");
         JsonNode results;
         try {
-            HttpResponse<String> r = http.send(post("https://api.osv.dev/v1/querybatch", body.toString()), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> r = http.sendAsync(post("https://api.osv.dev/v1/querybatch", body.toString()), HttpResponse.BodyHandlers.ofString())
+                    .get(20, java.util.concurrent.TimeUnit.SECONDS);
             if (r.statusCode() != 200) throw new IllegalStateException("HTTP " + r.statusCode());
             results = MAPPER.readTree(r.body()).path("results");
         } catch (Exception e) {
             failed.add("OSV querybatch 실패: " + e.getMessage());
             return out;
         }
-        // id → 상세. 같은 id 가 여러 좌표에 걸리므로 한 번만 받는다.
-        Map<String, CompletableFuture<Vuln>> details = new LinkedHashMap<>();
+        // 응답이 요청보다 짧거나 페이지 분할이면 뒤쪽 좌표는 "0건" 이 아니라 "미조회" 다. 조용히 넘기지 않는다.
+        if (!results.isArray() || results.size() < entries.size())
+            failed.add("OSV querybatch 응답 " + (results.isArray() ? results.size() : 0) + "/" + entries.size() + " 좌표만 도착");
+        for (JsonNode r : results) if (r.has("next_page_token")) { failed.add("OSV 응답 페이지 분할(next_page_token) — 일부 취약점 미조회"); break; }
         Map<String, List<String>> idsByCoord = new LinkedHashMap<>();
+        Set<String> allIds = new LinkedHashSet<>();
         for (int i = 0; i < entries.size() && i < results.size(); i++) {
             List<String> ids = new ArrayList<>();
             for (JsonNode v : results.get(i).path("vulns")) {
                 String id = v.path("id").asText();
                 ids.add(id);
-                details.computeIfAbsent(id, k -> http.sendAsync(
-                        HttpRequest.newBuilder(URI.create("https://api.osv.dev/v1/vulns/" + k)).timeout(Duration.ofSeconds(8)).GET().build(),
-                        HttpResponse.BodyHandlers.ofString()).thenApply(resp -> resp.statusCode() == 200 ? parseOne(MAPPER_READ(resp.body())) : null));
+                allIds.add(id);
             }
             idsByCoord.put(entries.get(i).getKey(), ids);
         }
+        // id 별 상세는 20개씩 끊어 받는다. 한꺼번에 수백 건을 쏘면 429 로 탈락해 건수가 과소 집계된다.
         Map<String, Vuln> got = new LinkedHashMap<>();
-        details.forEach((id, f) -> {
-            try {
-                Vuln v = f.get();
-                if (v != null) got.put(id, v); else failed.add(id);
-            } catch (Exception e) {
-                failed.add(id);
-            }
-        });
+        List<String> idList = new ArrayList<>(allIds);
+        for (int start = 0; start < idList.size(); start += 20) {
+            List<String> chunk = idList.subList(start, Math.min(start + 20, idList.size()));
+            Map<String, CompletableFuture<HttpResponse<String>>> pending = new LinkedHashMap<>();
+            for (String id : chunk) pending.put(id, http.sendAsync(
+                    HttpRequest.newBuilder(URI.create("https://api.osv.dev/v1/vulns/" + id)).timeout(Duration.ofSeconds(8)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString()));
+            pending.forEach((id, f) -> {
+                try {
+                    HttpResponse<String> resp = f.get(15, java.util.concurrent.TimeUnit.SECONDS);
+                    Vuln v = resp.statusCode() == 200 ? parseOne(MAPPER_READ(resp.body())) : null;
+                    if (v != null) got.put(id, v); else failed.add(id + " 상세 조회 실패(HTTP " + resp.statusCode() + ")");
+                } catch (Exception e) {
+                    failed.add(id + " 상세 조회 실패");
+                }
+            });
+        }
         idsByCoord.forEach((coord, ids) -> {
             List<Vuln> vs = ids.stream().map(got::get).filter(v -> v != null).toList();
             if (!vs.isEmpty()) out.put(coord, vs);

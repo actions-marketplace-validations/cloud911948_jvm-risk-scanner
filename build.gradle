@@ -21,7 +21,10 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-tasks.named('test') { useJUnitPlatform() }
+tasks.named('test') {
+    useJUnitPlatform()
+    systemProperty 'golden.update', System.getProperty('golden.update', 'false') // 골든 파일 갱신: ./gradlew test -Dgolden.update=true
+}
 
 // 단일 실행 jar. GitHub Action 과 로컬에서 `java -jar build/libs/jvm-risk-scanner.jar <dir>` 로 쓴다.
 tasks.register('fatJar', Jar) {

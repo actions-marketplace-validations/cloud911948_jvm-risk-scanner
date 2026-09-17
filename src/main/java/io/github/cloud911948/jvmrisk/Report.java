@@ -43,13 +43,15 @@ public final class Report {
         for (Finding x : findings) {
             if (seen.add(x.id())) ruleDefs.add(Map.of("id", x.id(), "shortDescription", Map.of("text", x.id()),
                     "help", Map.of("text", x.action())));
-            String level = switch (x.severity()) { case "critical", "high" -> "error"; case "medium" -> "warning"; default -> "note"; };
+            String level = switch (x.severity()) { case "critical", "high" -> "error"; case "medium", "unknown" -> "warning"; default -> "note"; };
             String file = firstFile(x.detail());
             Map<String, Object> r = new LinkedHashMap<>();
             r.put("ruleId", x.id());
             r.put("level", level);
             r.put("message", Map.of("text", x.title() + (x.detail().isEmpty() ? "" : " — " + x.detail()) + " — 조치: " + x.action()));
             r.put("locations", List.of(Map.of("physicalLocation", Map.of("artifactLocation", Map.of("uri", file)))));
+            // 실행마다 건수·목록이 바뀌어도 같은 이슈로 추적되게 id+제품·버전(제목의 콜론 앞)만으로 지문을 만든다. .jvmrisk-ignore 의 키(id)와 같은 축.
+            r.put("partialFingerprints", Map.of("jvmrisk/v1", fingerprint(x.id() + "|" + x.title().split(":")[0].split(" — ")[0])));
             results.add(r);
         }
         Map<String, Object> run = Map.of(
@@ -62,6 +64,11 @@ public final class Report {
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /** String.hashCode 는 명세로 고정된 값이라 실행·JVM 이 달라도 같다. 지문에 암호 해시는 필요 없다. */
+    private static String fingerprint(String s) {
+        return Integer.toHexString(s.hashCode());
     }
 
     /** detail 의 "사용 흔적: a, b" 나 "Unsafe 사용 파일: a" 에서 첫 파일. 없으면 빌드 파일 자리. */

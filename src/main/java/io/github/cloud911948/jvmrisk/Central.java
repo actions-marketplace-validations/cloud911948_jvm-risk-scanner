@@ -29,7 +29,8 @@ public final class Central {
         try {
             String[] ga = coord.split(":");
             String url = "https://repo1.maven.org/maven2/" + ga[0].replace('.', '/') + "/" + ga[1] + "/maven-metadata.xml";
-            HttpResponse<String> r = http.send(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(8)).GET().build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> r = http.sendAsync(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(8)).GET().build(), HttpResponse.BodyHandlers.ofString())
+                    .get(15, java.util.concurrent.TimeUnit.SECONDS);
             if (r.statusCode() == 200) {
                 Matcher m = VERSION.matcher(r.body());
                 out = new java.util.ArrayList<>();
@@ -52,9 +53,13 @@ public final class Central {
         if (all.contains(version)) return version;
         String line = Version.line(version);
         Version want = Version.parse(version);
+        // 4.1.137 vs 4.1.137.Final 처럼 qualifier 만 다른 동치가 있으면 그것이 답이다. 다음 패치로 건너뛰면 안 된다.
+        java.util.Optional<String> same = all.stream().filter(v -> Version.parse(v).compareTo(want) == 0).findFirst();
+        if (same.isPresent()) return same.get();
+        // 번호가 건너뛴 릴리스면 다음 버전이 수정을 담고 있지만, OSV 의 수정 버전 자체가 틀린 경우는 구분 못 한다. 그래서 "추정" 이다.
         return all.stream().filter(v -> Version.line(v).equals(line) && Version.parse(v).compareTo(want) > 0)
                 .min(Version.ORDER)
-                .map(v -> v + " (OSV 는 " + version + " 표기, Central 미존재)")
-                .orElse(version + " (Central 미존재, 같은 라인 후속 없음)");
+                .map(v -> v + " (추정: OSV 는 " + version + " 표기, Central 미존재 → 같은 라인 다음 버전)")
+                .orElse(version + " (Central 미존재, 같은 라인 후속 없음 — 권고문 직접 확인)");
     }
 }

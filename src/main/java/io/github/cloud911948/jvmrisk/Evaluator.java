@@ -50,6 +50,11 @@ public final class Evaluator {
         cve(f, out);
         transitive(f, out);
         misc(f, out);
+        if (!f.unavailable.isEmpty()) {
+            // 조회 실패는 "취약점 0건" 이 아니다. 부재가 안전함으로 읽히지 않게 별도 항목으로 남긴다.
+            out.add(new Finding("unknown", "SCAN-UNKNOWN", "온라인 조회 실패 " + f.unavailable.size() + "건 — 이 리포트의 CVE·EOL 판정은 불완전하다",
+                    String.join("; ", f.unavailable), "네트워크 확인 후 재실행. --fail-on 은 이 항목도 실패로 본다. 스냅샷만으로 보려면 --offline"));
+        }
         out.sort(Finding.BY_SEVERITY);
         return out;
     }
@@ -104,6 +109,9 @@ public final class Evaluator {
     }
 
     private void cve(Facts f, List<Finding> out) {
+        // OSV 를 물은 제품은 전부 판정에 넣는다. 조회만 하고 판정에서 빠지면 그 CVE 는 어디에도 안 나온다(9/17 spring-web CRITICAL 누락 사례).
+        cveCheck(out, f, "spring-boot", f.deps.get("spring-boot"), "spring-boot");
+        cveCheck(out, f, "spring-framework", f.deps.get("spring-framework"), "spring-framework");
         cveCheck(out, f, "spring-security", f.deps.get("spring-security"), "spring-security");
         cveCheck(out, f, "spring-graphql", f.deps.get("spring-graphql"), "spring-graphql");
         cveCheck(out, f, "netty", f.deps.get("netty"), "netty");

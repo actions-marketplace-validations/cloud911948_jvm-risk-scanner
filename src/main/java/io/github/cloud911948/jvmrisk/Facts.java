@@ -36,6 +36,8 @@ public final class Facts {
     public String eolSrc = "rules.json";
     public List<Finding> suppressed = new ArrayList<>();
     public List<String> ignoreNotes = new ArrayList<>();
+    /** 온라인 조회 실패 사유. 비어 있지 않으면 Evaluator 가 SCAN-UNKNOWN 을 낸다. */
+    public List<String> unavailable = new ArrayList<>();
 
     public Facts(Path root) {
         this.root = root;

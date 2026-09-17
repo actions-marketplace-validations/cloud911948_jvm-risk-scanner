@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 사용: java -jar jvm-risk-scanner.jar [디렉터리] [--json | --sarif] [--rules 경로] [--deps 해석출력] [--offline] [--suggest] [--fail-on critical|high|medium]
+ * 사용: java -jar jvm-risk-scanner.jar [디렉터리] [--json | --sarif] [--rules 경로] [--deps 해석출력] [--offline] [--suggest] [--fail-on critical|high|medium] [--sarif-out 파일]
  * 기본은 OSV.dev(취약 범위)·endoflife.date(EOL)를 조회한다. --offline 이면 rules.json 스냅샷만 쓴다.
  * --deps 는 `gradle dependencies` / `mvn dependency:tree` 출력 파일. 있으면 실제 해석 버전과 전이 의존성까지 본다.
  * --suggest 는 OSV 에만 있는 항목을 rules.json 항목 뼈대(evidence 비움)로 찍어 사람이 채우게 한다.
@@ -31,11 +31,16 @@ public final class Main {
         boolean suggest = false;
         Path depsFile = null;
         String failOn = null;
+        Path sarifOut = null;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--json" -> json = true;
                 case "--offline" -> offline = true;
                 case "--sarif" -> sarif = true;
+                case "--sarif-out" -> {
+                    if (i + 1 >= args.length) usage("--sarif-out 뒤에 파일 경로가 필요합니다");
+                    sarifOut = Path.of(args[++i]);
+                }
                 case "--suggest" -> suggest = true;
                 case "--fail-on" -> {
                     if (i + 1 >= args.length || !List.of("critical", "high", "medium", "low").contains(args[i + 1])) usage("--fail-on 뒤에 critical|high|medium|low 가 필요합니다");
@@ -69,16 +74,20 @@ public final class Main {
             Osv osv = new Osv();
             vulns = osv.queryProducts(facts.deps);
             if (!facts.resolved.isEmpty()) {
-                java.util.Set<String> productCoords = new java.util.HashSet<>(DepTree.PRODUCT_OF.keySet());
+                java.util.Set<String> productCoords = new java.util.HashSet<>();
+                Osv.COORDS.values().forEach(productCoords::addAll); // 제품 라인에서 이미 물은 모듈은 전이에서 빼야 이중 계상이 없다
                 Map<String, String> others = new java.util.LinkedHashMap<>();
                 facts.resolved.forEach((k, v) -> { if (!productCoords.contains(k) && !k.startsWith("org.springframework.security:")) others.put(k, v); });
                 facts.transitive.putAll(osv.queryCoords(others));
             }
             facts.osv = "조회 " + vulns.size() + "개 제품" + (facts.resolved.isEmpty() ? "" : " + 전이 " + facts.transitive.size() + "개 아티팩트")
-                    + (osv.failed().isEmpty() ? "" : ", 실패 " + osv.failed().size() + "건 → 스냅샷");
+                    + (osv.failed().isEmpty() ? "" : ", 실패 " + osv.failed().size() + "건");
+            osv.failed().stream().limit(5).forEach(x -> facts.unavailable.add("OSV: " + x));
+            if (osv.failed().size() > 5) facts.unavailable.add("OSV: 외 " + (osv.failed().size() - 5) + "건");
             Eol eol = new Eol();
             rules = new Rules(rules.version(), rules.jdk27Defaults(), eol.merge(rules.eol()), rules.eolWarnDays(), rules.cves(), rules.bootBom());
             facts.eolSrc = "endoflife.date" + (eol.failed().isEmpty() ? "" : "(실패 " + eol.failed() + " 는 rules.json)");
+            eol.failed().forEach(x -> facts.unavailable.add("endoflife.date: " + x));
         }
         List<Finding> findings = new java.util.ArrayList<>(new Evaluator(rules, LocalDate.now(), vulns, central).evaluate(facts));
         Ignore ignore = Ignore.load(root);
@@ -90,12 +99,18 @@ public final class Main {
             return;
         }
         System.out.print(sarif ? Report.sarif(rules, facts, findings) : json ? Report.json(facts, findings) : Report.markdown(rules, facts, findings));
+        if (sarifOut != null) {
+            try {
+                Files.writeString(sarifOut, Report.sarif(rules, facts, findings)); // 한 번의 실행에서 리포트와 SARIF 를 같이 낸다. 두 번 돌리면 조회 결과가 달라질 수 있다.
+            } catch (java.io.IOException e) {
+                usage("SARIF 를 쓸 수 없습니다: " + sarifOut);
+            }
+        }
         if (failOn != null) {
-            List<String> order = List.of("critical", "high", "medium", "low", "info");
-            int limit = order.indexOf(failOn);
-            boolean hit = findings.stream().anyMatch(x -> order.indexOf(x.severity()) <= limit);
+            int limit = Finding.SEVERITIES.indexOf(failOn);
+            boolean hit = findings.stream().anyMatch(x -> x.severity().equals("unknown") || Finding.SEVERITIES.indexOf(x.severity()) <= limit);
             if (hit) {
-                System.err.println("--fail-on " + failOn + ": 해당 심각도 이상 항목이 있어 종료 코드 1");
+                System.err.println("--fail-on " + failOn + ": 해당 심각도 이상(또는 판정 불능 UNKNOWN) 항목이 있어 종료 코드 1");
                 System.exit(1);
             }
         }

@@ -38,7 +38,7 @@ public final class Eol {
         pending.forEach((product, f) -> {
             JsonNode cycles;
             try {
-                cycles = f.get();
+                cycles = f.get(15, java.util.concurrent.TimeUnit.SECONDS); // request timeout 은 헤더까지만 보장한다
             } catch (Exception e) {
                 cycles = null;
             }
@@ -49,16 +49,18 @@ public final class Eol {
             for (JsonNode c : cycles) {
                 String cycle = c.path("cycle").asText();
                 JsonNode eolNode = c.path("eol");
-                // endoflife.date 는 아직 종료 안 된 라인을 false 로 준다 → 표에서는 null(미정)
+                // endoflife.date 의 eol 은 날짜 | false(미종료) | true(종료됐으나 날짜 미상). true 를 null 로 바꾸면 EOL-PAST 가 조용히 사라진다.
                 String eol = eolNode.isTextual() ? eolNode.asText() : null;
+                boolean endedNoDate = eolNode.isBoolean() && eolNode.asBoolean();
                 String latest = c.path("latest").asText(null);
                 int idx = -1;
                 for (int i = 0; i < out.size(); i++) if (out.get(i).product().equals(product) && out.get(i).cycle().equals(cycle)) idx = i;
                 if (idx >= 0) {
                     Rules.Eol o = out.get(idx);
-                    out.set(idx, new Rules.Eol(product, cycle, eol, latest != null ? latest : o.latest(), o.note()));
+                    String date = eol != null ? eol : endedNoDate ? (o.eol() != null ? o.eol() : java.time.LocalDate.now().toString()) : null;
+                    out.set(idx, new Rules.Eol(product, cycle, date, latest != null ? latest : o.latest(), o.note()));
                 } else {
-                    out.add(new Rules.Eol(product, cycle, eol, latest, "endoflife.date"));
+                    out.add(new Rules.Eol(product, cycle, eol != null ? eol : endedNoDate ? java.time.LocalDate.now().toString() : null, latest, "endoflife.date"));
                 }
             }
         });

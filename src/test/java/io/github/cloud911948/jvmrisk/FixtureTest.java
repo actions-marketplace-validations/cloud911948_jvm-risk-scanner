@@ -110,6 +110,15 @@ class FixtureTest {
     }
 
     @Test
+    void everyQueriedProductIsEvaluated() {
+        Facts f = collect("fixture3"); // Boot 3.5.13 → framework 6.2.17(bom~)
+        java.util.Map<String, List<Osv.Vuln>> osv = java.util.Map.of("spring-framework", List.of(
+                new Osv.Vuln("GHSA-fw", List.of("CVE-2099-1"), "critical", "framework only", List.of("6.2.99"), "u", List.of())));
+        List<Finding> findings = new Evaluator(RULES, TODAY, osv).evaluate(f);
+        assertTrue(findings.stream().anyMatch(x -> x.id().equals("OSV-SPRING-FRAMEWORK")), "조회한 제품이 판정에서 빠지면 CVE 가 어디에도 안 나온다");
+    }
+
+    @Test
     void osvParseReadsAliasesFixedAndSeverity() {
         String json = "{\"vulns\":[{\"id\":\"GHSA-x\",\"aliases\":[\"CVE-1\"],\"summary\":\"s\",\"database_specific\":{\"severity\":\"MODERATE\"},"
                 + "\"affected\":[{\"ranges\":[{\"events\":[{\"introduced\":\"0\"},{\"fixed\":\"1.2\"}]}]}]}]}";
