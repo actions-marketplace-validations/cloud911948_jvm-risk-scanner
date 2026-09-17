@@ -16,6 +16,9 @@ inputs:
   sarif:
     description: jvm-risk.sarif 도 생성 (true/false). 업로드는 호출 워크플로에서 github/codeql-action/upload-sarif 로
     default: "false"
+  fail-on:
+    description: 이 심각도 이상이 있으면 단계 실패 (critical|high|medium|low). 비우면 리포트만
+    default: ""
 runs:
   using: composite
   steps:
@@ -31,6 +34,7 @@ runs:
         java -jar "$JAR" "${{ inputs.path }}" $DEPS > jvm-risk-report.md
         cat jvm-risk-report.md >> "$GITHUB_STEP_SUMMARY"
         if [ "${{ inputs.sarif }}" = "true" ]; then java -jar "$JAR" "${{ inputs.path }}" $DEPS --sarif > jvm-risk.sarif; fi
+        if [ -n "${{ inputs.fail-on }}" ]; then java -jar "$JAR" "${{ inputs.path }}" $DEPS --fail-on "${{ inputs.fail-on }}" > /dev/null; fi
     - if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
       shell: bash
       env:
