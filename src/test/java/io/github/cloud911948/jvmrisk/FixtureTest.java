@@ -46,11 +46,14 @@ class FixtureTest {
         assertTrue(f.images.contains(new Facts.Image("redis", "8.2.7")));
         for (String must : List.of("JDK27-GC-DEFAULT", "JDK27-COH-DEFAULT", "JDK27-COH-UNSAFE", "JDK27-COH-LAYOUT-TOOLS",
                 "JDK27-COH-AGENT", "JDK27-JFR-REDACT", "EOL-SOON", "CVE-2026-59270", "CVE-2026-59285", "CVE-2026-41707",
-                "CVE-2026-47841", "CVE-2026-47877", "CVE-2026-81934")) {
+                "CVE-2026-47841", "CVE-2026-47877", "CVE-2026-81934", "CVE-2026-65182")) {
             assertTrue(ids.contains(must), must + " 누락: " + ids);
         }
         assertTrue(titles.contains("spring-boot 4.0.8") && titles.contains("119일"), titles); // 4.0 라인 EOL 2026-12-31
         assertFalse(ids.contains("JDK27-GC-EXPLICIT"));
+        // Boot 4.0.8 BOM → Tomcat 11.0.24, web.xml 에 security-constraint 가 있으니 흔적 있음 → 원래 심각도
+        assertEquals("11.0.24", f.deps.get("tomcat"));
+        assertEquals("critical", findings.stream().filter(x -> x.id().equals("CVE-2026-65182")).findFirst().orElseThrow().severity());
     }
 
     @Test
@@ -62,6 +65,9 @@ class FixtureTest {
         assertEquals("bom", f.src.get("spring-security"));
         assertTrue(ids.contains("CVE-2026-59270"), ids.toString());
         assertFalse(ids.contains("DEP-ESTIMATED"));
+        // Boot 4.0.7 BOM → netty 4.2.15(취약)지만 SNI mTLS 흔적 없음 → info
+        assertEquals("4.2.15.Final", f.deps.get("netty"));
+        assertEquals("info", evaluate(f).stream().filter(x -> x.id().equals("CVE-2026-75595")).findFirst().orElseThrow().severity());
     }
 
     @Test

@@ -82,8 +82,11 @@ public final class Evaluator {
     private void cve(Facts f, List<Finding> out) {
         cveCheck(out, f, "spring-security", f.deps.get("spring-security"), "spring-security");
         cveCheck(out, f, "spring-graphql", f.deps.get("spring-graphql"), "spring-graphql");
+        cveCheck(out, f, "netty", f.deps.get("netty"), "netty");
+        cveCheck(out, f, "tomcat", f.deps.get("tomcat"), "tomcat");
         for (Facts.Image img : f.images) {
             if (img.name().equals("redis")) cveCheck(out, f, "redis-server", img.version(), "redis");
+            if (img.name().equals("tomcat") && !f.deps.containsKey("tomcat")) cveCheck(out, f, "tomcat", img.version(), "tomcat(image)");
         }
     }
 

@@ -46,6 +46,8 @@ public final class Collector {
     private static final Pattern SECURITY_PROP = Pattern.compile("spring-security\\.version\\s*[=>]+\\s*['\"]?([\\d.]+)|<spring-security\\.version>([\\d.]+)");
     private static final Pattern GRAPHQL = Pattern.compile("spring-graphql[:\"'\\s]+([\\d.]+)|<spring-graphql\\.version>([\\d.]+)");
     private static final Pattern FRAMEWORK = Pattern.compile("org\\.springframework[:\"'\\s]+spring-(?:core|context|web)[:\"'\\s]+([\\d.]+)");
+    private static final Pattern NETTY = Pattern.compile("io\\.netty[:\"'\\s]+netty-(?:handler|all|codec-http2?|transport)[:\"'\\s]+([\\d.]+(?:\\.Final)?)|<netty\\.version>([\\d.]+(?:\\.Final)?)|netty\\.version\\s*[=:]\\s*['\"]?([\\d.]+(?:\\.Final)?)");
+    private static final Pattern TOMCAT = Pattern.compile("org\\.apache\\.tomcat(?:\\.embed)?[:\"'\\s]+tomcat-[\\w\\-]+[:\"'\\s]+([\\d.]+)|<tomcat\\.version>([\\d.]+)|tomcat\\.version\\s*[=:]\\s*['\"]?([\\d.]+)");
     private static final Pattern IMAGE = Pattern.compile("(?:image:|FROM)\\s+(redis|tomcat)[:\\s]+v?([\\d.]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern UNSAFE = Pattern.compile("sun\\.misc\\.Unsafe|jdk\\.internal\\.misc\\.Unsafe");
 
@@ -126,6 +128,8 @@ public final class Collector {
         find(SECURITY_PROP, text, m -> f.deps.put("spring-security", first(m)));
         find(GRAPHQL, text, m -> f.deps.put("spring-graphql", first(m)));
         find(FRAMEWORK, text, m -> f.deps.put("spring-framework", m.group(1)));
+        find(NETTY, text, m -> f.deps.put("netty", first(m)));
+        find(TOMCAT, text, m -> f.deps.put("tomcat", first(m)));
         if (text.contains("org.openjdk.jol")) f.deps.put("jol", "?");
         if (text.contains("lincheck")) f.deps.put("lincheck", "?");
         find(IMAGE, text, m -> f.images.add(new Facts.Image(m.group(1).toLowerCase(), m.group(2))));
@@ -147,7 +151,7 @@ public final class Collector {
             row = rules.bootBom().get(nearest);
             tag = "bom~";
         }
-        for (String k : List.of("spring-security", "spring-framework", "spring-graphql")) {
+        for (String k : List.of("spring-security", "spring-framework", "spring-graphql", "tomcat", "netty")) {
             if (!f.deps.containsKey(k) && row.get(k) != null) {
                 f.deps.put(k, row.get(k));
                 f.src.put(k, tag);

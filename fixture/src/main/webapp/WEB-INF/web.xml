@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee" version="6.0">
+  <!-- CVE-2026-65182 픽스처: 긴 경로 제약이 짧은 하위 경로의 더 엄격한 제약보다 먼저 -->
+  <security-constraint>
+    <web-resource-collection><url-pattern>/admin/reports/*</url-pattern></web-resource-collection>
+    <auth-constraint><role-name>viewer</role-name></auth-constraint>
+  </security-constraint>
+  <security-constraint>
+    <web-resource-collection><url-pattern>/admin/*</url-pattern></web-resource-collection>
+    <auth-constraint><role-name>admin</role-name></auth-constraint>
+  </security-constraint>
+</web-app>
