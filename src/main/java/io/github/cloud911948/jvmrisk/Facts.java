@@ -35,6 +35,7 @@ public final class Facts {
     public final Map<String, List<Osv.Vuln>> transitive = new LinkedHashMap<>();
     public String eolSrc = "rules.json";
     public List<Finding> suppressed = new ArrayList<>();
+    public List<String> ignoreNotes = new ArrayList<>();
 
     public Facts(Path root) {
         this.root = root;

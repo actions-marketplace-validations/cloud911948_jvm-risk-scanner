@@ -11,11 +11,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 사용: java -jar jvm-risk-scanner.jar [디렉터리] [--json | --sarif] [--rules 경로] [--deps 해석출력] [--offline] [--suggest]
+ * 사용: java -jar jvm-risk-scanner.jar [디렉터리] [--json | --sarif] [--rules 경로] [--deps 해석출력] [--offline] [--suggest] [--fail-on critical|high|medium]
  * 기본은 OSV.dev(취약 범위)·endoflife.date(EOL)를 조회한다. --offline 이면 rules.json 스냅샷만 쓴다.
  * --deps 는 `gradle dependencies` / `mvn dependency:tree` 출력 파일. 있으면 실제 해석 버전과 전이 의존성까지 본다.
  * --suggest 는 OSV 에만 있는 항목을 rules.json 항목 뼈대(evidence 비움)로 찍어 사람이 채우게 한다.
- * 종료 코드는 항상 0 이다. PR 을 막는 게 아니라 리포트를 남기는 도구이고, 막을지는 워크플로에서 정한다.
+ * 종료 코드는 기본 0 이다(리포트만). --fail-on 을 주면 그 심각도 이상이 하나라도 있을 때 1 로 끝나 PR 을 막을 수 있다.
  */
 public final class Main {
 
@@ -30,12 +30,17 @@ public final class Main {
         boolean offline = false;
         boolean suggest = false;
         Path depsFile = null;
+        String failOn = null;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--json" -> json = true;
                 case "--offline" -> offline = true;
                 case "--sarif" -> sarif = true;
                 case "--suggest" -> suggest = true;
+                case "--fail-on" -> {
+                    if (i + 1 >= args.length || !List.of("critical", "high", "medium", "low").contains(args[i + 1])) usage("--fail-on 뒤에 critical|high|medium|low 가 필요합니다");
+                    failOn = args[++i];
+                }
                 case "--deps" -> {
                     if (i + 1 >= args.length) usage("--deps 뒤에 의존성 해석 출력 파일 경로가 필요합니다");
                     depsFile = Path.of(args[++i]);
@@ -58,7 +63,9 @@ public final class Main {
             }
         }
         Map<String, List<Osv.Vuln>> vulns = Map.of();
+        Central central = null;
         if (!offline) {
+            central = new Central();
             Osv osv = new Osv();
             vulns = osv.queryProducts(facts.deps);
             if (!facts.resolved.isEmpty()) {
@@ -73,18 +80,30 @@ public final class Main {
             rules = new Rules(rules.version(), rules.jdk27Defaults(), eol.merge(rules.eol()), rules.eolWarnDays(), rules.cves(), rules.bootBom());
             facts.eolSrc = "endoflife.date" + (eol.failed().isEmpty() ? "" : "(실패 " + eol.failed() + " 는 rules.json)");
         }
-        List<Finding> findings = new java.util.ArrayList<>(new Evaluator(rules, LocalDate.now(), vulns).evaluate(facts));
-        facts.suppressed = Ignore.load(root).apply(findings);
+        List<Finding> findings = new java.util.ArrayList<>(new Evaluator(rules, LocalDate.now(), vulns, central).evaluate(facts));
+        Ignore ignore = Ignore.load(root);
+        facts.suppressed = ignore.apply(findings);
+        ignore.invalid.forEach(x -> facts.ignoreNotes.add("무효한 억제 줄: " + x));
+        ignore.expired.forEach(x -> facts.ignoreNotes.add("억제 만료로 재등장: " + x));
         if (suggest) {
             System.out.print(Report.suggest(rules, vulns));
             return;
         }
         System.out.print(sarif ? Report.sarif(rules, facts, findings) : json ? Report.json(facts, findings) : Report.markdown(rules, facts, findings));
+        if (failOn != null) {
+            List<String> order = List.of("critical", "high", "medium", "low", "info");
+            int limit = order.indexOf(failOn);
+            boolean hit = findings.stream().anyMatch(x -> order.indexOf(x.severity()) <= limit);
+            if (hit) {
+                System.err.println("--fail-on " + failOn + ": 해당 심각도 이상 항목이 있어 종료 코드 1");
+                System.exit(1);
+            }
+        }
     }
 
     private static void usage(String reason) {
         System.err.println(reason);
-        System.err.println("사용: java -jar jvm-risk-scanner.jar [디렉터리] [--json | --sarif] [--rules 경로] [--deps 해석출력] [--offline] [--suggest]");
+        System.err.println("사용: java -jar jvm-risk-scanner.jar [디렉터리] [--json | --sarif] [--rules 경로] [--deps 해석출력] [--offline] [--suggest] [--fail-on 심각도]");
         System.exit(2);
     }
 }

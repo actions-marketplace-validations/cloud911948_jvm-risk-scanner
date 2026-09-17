@@ -38,6 +38,17 @@ public record Rules(
         for (Cve c : cves) {
             if (c.affected() == null || c.affected().stream().anyMatch(r -> r.size() != 2))
                 throw new IllegalArgumentException("rules.json: " + c.id() + " 의 affected 는 [최소, 최대] 쌍이어야 합니다");
+            for (List<String> r : c.affected()) {
+                if (!r.get(0).matches("\\d+(\\.\\d+)*(\\.[A-Za-z]+)?") || !r.get(1).matches("\\d+(\\.\\d+)*(\\.[A-Za-z]+)?"))
+                    throw new IllegalArgumentException("rules.json: " + c.id() + " 의 affected 버전 형식이 아닙니다: " + r);
+            }
+            // 사용 흔적은 이 도구의 판단이 들어가는 유일한 곳. 근거 URL 과 흔적 문자열 없이는 다른 사람이 검증할 수 없다.
+            if (c.source() == null || c.source().isBlank())
+                throw new IllegalArgumentException("rules.json: " + c.id() + " 에 source(권고문 URL)가 없습니다");
+            if (c.evidence() == null || c.evidence().isEmpty())
+                throw new IllegalArgumentException("rules.json: " + c.id() + " 에 evidence(사용 흔적 문자열)가 없습니다 — 버전만 보는 항목은 OSV 가 대신합니다");
+            if (c.condition() == null || c.condition().isBlank())
+                throw new IllegalArgumentException("rules.json: " + c.id() + " 에 condition(발동 조건)이 없습니다");
         }
     }
 

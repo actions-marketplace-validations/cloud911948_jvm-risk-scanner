@@ -17,15 +17,30 @@ public final class Evaluator {
     private final LocalDate today;
     /** product → OSV 취약점. 오프라인이거나 조회 실패면 비어 있고, 그때는 rules.json 스냅샷만 본다. */
     private final Map<String, List<Osv.Vuln>> osv;
+    /** 권고 버전 존재 확인. null 이면(오프라인) 검증 없이 그대로 찍는다. */
+    private final Central central;
 
     public Evaluator(Rules rules, LocalDate today) {
-        this(rules, today, Map.of());
+        this(rules, today, Map.of(), null);
     }
 
     public Evaluator(Rules rules, LocalDate today, Map<String, List<Osv.Vuln>> osv) {
+        this(rules, today, osv, null);
+    }
+
+    public Evaluator(Rules rules, LocalDate today, Map<String, List<Osv.Vuln>> osv, Central central) {
         this.rules = rules;
         this.today = today;
         this.osv = osv;
+        this.central = central;
+    }
+
+    /** 수정 버전 목록을 Central 로 검증한 문자열. 오프라인이면 원문. */
+    private String fixedText(String product, List<String> fixed) {
+        if (central == null || fixed.isEmpty()) return String.join(", ", fixed);
+        String coord = Osv.COORDS.getOrDefault(product, List.of()).stream().findFirst().orElse(null);
+        if (coord == null) return String.join(", ", fixed);
+        return fixed.stream().map(v -> central.verify(coord, v)).collect(Collectors.joining(", "));
     }
 
     public List<Finding> evaluate(Facts f) {
@@ -112,7 +127,7 @@ public final class Evaluator {
             if (!affected) continue;
             known.add(c.id());
             List<String> ev = f.evidence.getOrDefault(c.id(), List.of());
-            String fixed = String.join(", ", c.fixed());
+            String fixed = fixedText(product, c.fixed());
             if (!ev.isEmpty()) {
                 out.add(new Finding(c.severity(), c.id(),
                         label + " " + version + ": " + c.title() + " (CVSS " + (c.cvss() == null ? "-" : c.cvss()) + ")",
@@ -122,7 +137,8 @@ public final class Evaluator {
                 // 버전은 취약 범위지만 취약 경로를 쓰는 흔적이 없다. 버전만 보고 CRITICAL 을 찍으면 운영자가 도구를 안 믿게 된다.
                 out.add(new Finding("info", c.id(),
                         label + " " + version + ": 취약 버전이나 사용 흔적 없음 — " + c.title(),
-                        "조건: " + c.condition() + " — 소스·빌드·설정에서 관련 문자열 미발견(조건 미충족 추정)",
+                        // 흔적 정의의 빈틈(리플렉션·프로퍼티 활성화·자동 구성)은 여기서 조용히 미탐이 된다. 무엇을 찾았는지 같이 찍어 검토자가 빈틈을 보게 한다.
+                        "조건: " + c.condition() + " — 소스·빌드·설정에서 관련 문자열 미발견(조건 미충족 추정). 찾은 흔적 문자열: " + String.join(" | ", c.evidence()),
                         "버전 자체는 취약 범위. 업그레이드 시 함께 해소: " + fixed));
             }
         }
@@ -145,10 +161,11 @@ public final class Evaluator {
         String line = Version.line(version);
         String fix = rest.stream().flatMap(v -> v.fixed().stream()).filter(x -> Version.line(x).equals(line)).max(Version.ORDER)
                 .orElseGet(() -> rest.stream().flatMap(v -> v.fixed().stream()).max(Version.ORDER).orElse("미기재"));
+        if (central != null && !fix.equals("미기재")) fix = fixedText(product, List.of(fix));
         out.add(new Finding("medium", "OSV-" + product.toUpperCase(),
                 label + " " + version + ": OSV 등재 취약점 " + rest.size() + "건 (" + counts + ") — 흔적 규칙 미정의",
                 "버전만으로 판정(사용 조건 미확인): " + ids,
-                "같은 라인 최신 " + fix + " 이상으로 올리면 일괄 해소. 낱개 확인은 https://osv.dev/list?ecosystem=Maven&q=" + Osv.COORDS.get(product)));
+                "같은 라인 최신 " + fix + " 이상으로 올리면 일괄 해소. 낱개 확인은 https://osv.dev/list?ecosystem=Maven&q=" + Osv.COORDS.getOrDefault(product, List.of(product)).get(0)));
     }
 
     /** --deps 로 받은 전이 의존성 중 OSV 에 걸린 것. 아티팩트당 한 줄이 아니라 전체를 한 항목으로, 세부는 detail 에. */

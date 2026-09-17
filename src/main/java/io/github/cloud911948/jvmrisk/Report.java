@@ -26,9 +26,11 @@ public final class Report {
             if (x.detail() != null && !x.detail().isEmpty()) sb.append("- ").append(x.detail()).append('\n');
             sb.append("- 조치: ").append(x.action()).append("\n\n");
         }
-        if (!f.suppressed.isEmpty()) {
-            sb.append("---\n억제 ").append(f.suppressed.size()).append("건 (.jvmrisk-ignore): ")
+        if (!f.suppressed.isEmpty() || !f.ignoreNotes.isEmpty()) {
+            sb.append("---\n");
+            if (!f.suppressed.isEmpty()) sb.append("억제 ").append(f.suppressed.size()).append("건 (.jvmrisk-ignore): ")
                     .append(f.suppressed.stream().map(Finding::id).distinct().collect(java.util.stream.Collectors.joining(", "))).append('\n');
+            for (String n : f.ignoreNotes) sb.append("- ").append(n).append('\n');
         }
         return sb.toString();
     }

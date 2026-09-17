@@ -76,18 +76,43 @@ class FeatureTest {
         Path tmp = Files.createTempDirectory("jvmrisk");
         Files.writeString(tmp.resolve(".jvmrisk-ignore"), """
                 # 검토 끝난 것
-                CVE-2026-59270            # 내장 LDAP 안 씀
-                EOL-PAST spring-boot      # 이행 일정 확정
+                CVE-2026-59270 until=2026-12-31           # 내장 LDAP 안 씀
+                EOL-PAST spring-boot until=2026-11-30     # 이행 일정 확정
+                JDK27-GC-DEFAULT until=2026-01-01         # 만료된 줄 — 다시 나와야 한다
+                JDK27-COH-DEFAULT                         # until 없음 — 무효
                 """);
         List<Finding> findings = new ArrayList<>(List.of(
                 new Finding("info", "CVE-2026-59270", "spring-security 5.7.3: ...", "", ""),
                 new Finding("high", "EOL-PAST", "spring-boot 2.7.3 — 지원 종료됨", "", ""),
                 new Finding("high", "EOL-PAST", "JDK 17 — 지원 종료됨", "", ""),
                 new Finding("medium", "JDK27-GC-DEFAULT", "...", "", "")));
-        List<Finding> removed = Ignore.load(tmp).apply(findings);
+        Ignore ig = Ignore.load(tmp, LocalDate.of(2026, 9, 17));
+        List<Finding> removed = ig.apply(findings);
         assertEquals(2, removed.size());
         assertEquals(2, findings.size());
         assertTrue(findings.stream().anyMatch(x -> x.title().startsWith("JDK 17"))); // 제목 조건이 안 맞는 EOL-PAST 는 남는다
+        assertEquals(1, ig.expired.size());   // 만료된 억제는 적용되지 않고 사유가 남는다
+        assertEquals(1, ig.invalid.size());   // until 없는 줄은 무효
+    }
+
+    @Test
+    void rulesRejectCveWithoutEvidenceOrSource() {
+        Rules.Cve bad = new Rules.Cve("CVE-0", "tomcat", "high", 7.0, "t", List.of(List.of("1.0", "1.1")), List.of("1.2"), "cond", "https://x", List.of());
+        try {
+            new Rules("v", RULES.jdk27Defaults(), RULES.eol(), 120, List.of(bad), RULES.bootBom());
+            throw new AssertionError("evidence 없는 CVE 가 통과했다");
+        } catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains("evidence"), e.getMessage());
+        }
+    }
+
+    @Test
+    void infoDowngradeListsEvidencePatterns() {
+        Facts f = new Collector(RULES).collect(Path.of("fixture2")); // Boot 4.0.7 → security 7.0.6, 흔적 없음
+        List<Finding> findings = new Evaluator(RULES, LocalDate.of(2026, 9, 3)).evaluate(f);
+        Finding info = findings.stream().filter(x -> x.id().equals("CVE-2026-59270")).findFirst().orElseThrow();
+        assertEquals("info", info.severity());
+        assertTrue(info.detail().contains("찾은 흔적 문자열: UnboundIdContainer"), info.detail()); // 검토자가 흔적 정의의 빈틈을 볼 수 있어야 한다
     }
 
     @Test
