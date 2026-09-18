@@ -10,7 +10,7 @@
     fail-on: high         # optional: exit 1 at this severity or above (UNKNOWN also fails)
 ```
 
-Runs on JDK 21+. The single runnable jar is attached to each [release](https://github.com/cloud911948/jvm-risk-scanner/releases). Full documentation below is in Korean.
+Runs on JDK 21+. The single runnable jar is attached to each [release](https://github.com/cloud911948/jvm-risk-scanner/releases), and the action is listed on the [GitHub Marketplace](https://github.com/marketplace/actions/jvm-runtime-risk-scan). Full documentation below is in Korean.
 
 ---
 
