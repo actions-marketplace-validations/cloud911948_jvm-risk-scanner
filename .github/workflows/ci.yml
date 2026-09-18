@@ -12,3 +12,14 @@ jobs:
       - run: ./gradlew -q test fatJar
       - name: 자기 저장소 fixture 스캔 (PR 코멘트와 같은 출력)
         run: java -jar build/libs/jvm-risk-scanner.jar fixture >> "$GITHUB_STEP_SUMMARY"
+  # Action 자체를 소비자 입장에서 돌려 본다. 릴리스 jar 다운로드 경로(있으면)와 소스 빌드 폴백(없으면) 둘 중 하나가 실제로 실행된다.
+  dogfood-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          path: fixture
+          comment: "false"
+          sarif: "true"
+      - run: test -s jvm-risk.sarif && grep -c '"ruleId"' jvm-risk.sarif

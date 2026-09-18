@@ -25,13 +25,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cloud911948/jvm-risk-scanner@main
+      - uses: cloud911948/jvm-risk-scanner@v0
 ```
+
+`@v0` 은 0.x 최신 릴리스를 따라갑니다. 고정하려면 `@v0.1.0`. Action 은 릴리스에 첨부된 jar 를 내려받아 실행하고, 못 받으면 소스에서 빌드합니다(리포트 끝에 어느 쪽인지 남습니다).
 
 로컬에서는 JDK 21 이상이면 됩니다.
 
 ```
-./gradlew -q fatJar
+# 릴리스 페이지의 jvm-risk-scanner.jar 를 받거나 ./gradlew -q fatJar
 java -jar build/libs/jvm-risk-scanner.jar /path/to/repo                     # 마크다운 리포트
 java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --json              # 감지 사실 + 지적 사항
 java -jar build/libs/jvm-risk-scanner.jar /path/to/repo --sarif             # GitHub code scanning 용

@@ -1,0 +1,28 @@
+# v* 태그를 푸시하면 테스트·빌드 후 jar 와 sha256 을 첨부한 릴리스를 만든다. 릴리스 노트는 release-notes/<태그>.md 가 있어야 한다.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions: { contents: write }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - run: ./gradlew -q test fatJar
+      - name: 체크섬
+        run: cd build/libs && sha256sum jvm-risk-scanner.jar > jvm-risk-scanner.jar.sha256 && cat jvm-risk-scanner.jar.sha256
+      - name: 릴리스 노트 확인
+        run: test -f "release-notes/${GITHUB_REF_NAME}.md" || { echo "release-notes/${GITHUB_REF_NAME}.md 가 없습니다"; exit 1; }
+      - name: 릴리스 생성
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/libs/jvm-risk-scanner.jar build/libs/jvm-risk-scanner.jar.sha256 \
+            --title "$GITHUB_REF_NAME" --notes-file "release-notes/${GITHUB_REF_NAME}.md"
+      - name: 메이저 태그 이동 (v0 → 이 릴리스)
+        run: |
+          MAJOR="${GITHUB_REF_NAME%%.*}"
+          git config user.name cloud911948 && git config user.email cloud911948@users.noreply.github.com
+          git tag -f "$MAJOR" && git push -f origin "$MAJOR"

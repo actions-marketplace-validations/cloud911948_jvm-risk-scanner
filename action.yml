@@ -26,11 +26,29 @@ runs:
       with:
         distribution: temurin
         java-version: "21"
+    - id: jar
+      shell: bash
+      env:
+        # 릴리스마다 이 값을 올린다(release.yml 이 같은 태그로 jar·sha256 을 첨부한다).
+        JVM_RISK_VERSION: v0.1.0
+      run: |
+        JAR="$RUNNER_TEMP/jvm-risk-scanner.jar"
+        BASE="https://github.com/cloud911948/jvm-risk-scanner/releases/download/$JVM_RISK_VERSION"
+        # 릴리스 jar 를 받고 체크섬을 맞춘다. 못 받으면(사내망·릴리스 없음) 소스에서 빌드한다. 어느 쪽인지는 리포트 머리에 남긴다.
+        if curl -fsSL -o "$JAR" "$BASE/jvm-risk-scanner.jar" && curl -fsSL -o "$JAR.sha256" "$BASE/jvm-risk-scanner.jar.sha256" \
+           && [ "$(sha256sum "$JAR" | cut -d' ' -f1)" = "$(cut -d' ' -f1 "$JAR.sha256")" ]; then
+          echo "source=release $JVM_RISK_VERSION" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::릴리스 jar 를 받지 못해 소스에서 빌드합니다"
+          "${{ github.action_path }}/gradlew" -q -p "${{ github.action_path }}" fatJar
+          cp "${{ github.action_path }}/build/libs/jvm-risk-scanner.jar" "$JAR"
+          echo "source=built from source" >> "$GITHUB_OUTPUT"
+        fi
+        echo "path=$JAR" >> "$GITHUB_OUTPUT"
     - id: scan
       shell: bash
       run: |
-        "${{ github.action_path }}/gradlew" -q -p "${{ github.action_path }}" fatJar
-        JAR="${{ github.action_path }}/build/libs/jvm-risk-scanner.jar"
+        JAR="${{ steps.jar.outputs.path }}"
         ARGS=("${{ inputs.path }}")
         [ -n "${{ inputs.deps-file }}" ] && ARGS+=(--deps "${{ inputs.deps-file }}")
         [ "${{ inputs.sarif }}" = "true" ] && ARGS+=(--sarif-out jvm-risk.sarif)
@@ -40,6 +58,8 @@ runs:
         java -jar "$JAR" "${ARGS[@]}" > jvm-risk-report.md
         RC=$?
         set -e
+        echo "" >> jvm-risk-report.md
+        echo "<sub>jvm-risk-scanner ${{ steps.jar.outputs.source }}</sub>" >> jvm-risk-report.md
         cat jvm-risk-report.md >> "$GITHUB_STEP_SUMMARY"
         echo "rc=$RC" >> "$GITHUB_OUTPUT"
     - if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' }}

@@ -17,7 +17,7 @@ jobs:
         with: { path: ~/.cache/jvm-risk-scanner, key: jvm-risk-osv-${{ github.run_id }}, restore-keys: jvm-risk-osv- }
       # 선택: 실제 해석 버전과 전이 의존성까지 보려면 트리를 먼저 뽑는다(배포 모듈 기준)
       - run: ./gradlew -q :app:dependencies --configuration runtimeClasspath > deps.txt || true
-      - uses: cloud911948/jvm-risk-scanner@main
+      - uses: cloud911948/jvm-risk-scanner@v0
         with:
           deps-file: deps.txt
           sarif: "true"
@@ -34,5 +34,5 @@ jobs:
         with: { repository: your-org/dormant-repo, token: ${{ secrets.DORMANT_REPO_TOKEN }}, path: dormant }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "21" }
-      - uses: cloud911948/jvm-risk-scanner@main
+      - uses: cloud911948/jvm-risk-scanner@v0
         with: { path: dormant, comment: "false", fail-on: high }
