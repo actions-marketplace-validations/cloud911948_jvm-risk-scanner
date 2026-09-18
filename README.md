@@ -1,5 +1,19 @@
 # jvm-risk-scanner
 
+**A GitHub Action that reads a repository and tells you what will bite you before moving to JDK 27.** It looks where dependency scanners do not: JVM flags, agents, `sun.misc.Unsafe` and JFR usage that JDK 27 defaults (JEP 523 G1 everywhere, JEP 534 compact object headers) actually touch; end of support for JDK, Spring Boot, Spring Framework, Spring Security, Tomcat and Redis lines (endoflife.date at scan time); and recent high-severity CVEs. CVEs are judged in two steps: vulnerable version ranges come from OSV.dev at scan time, and a CVE whose *usage evidence* strings are absent from source, build and config is downgraded to INFO instead of shouting CRITICAL for a feature you never use. Suggested fix versions are checked against Maven Central before they are printed. Report text is in Korean.
+
+```yaml
+- uses: cloud911948/jvm-risk-scanner@v0
+  with:
+    deps-file: deps.txt   # optional: gradle dependencies / mvn dependency:tree output
+    sarif: "true"         # optional: also write jvm-risk.sarif for code scanning
+    fail-on: high         # optional: exit 1 at this severity or above (UNKNOWN also fails)
+```
+
+Runs on JDK 21+. The single runnable jar is attached to each [release](https://github.com/cloud911948/jvm-risk-scanner/releases). Full documentation below is in Korean.
+
+---
+
 JDK 27로 올리기 전에 저장소만 보고 걸리는 것을 PR 코멘트로 남기는 GitHub Action입니다.
 
 Dependabot이나 Snyk는 의존성 버전을 봅니다. 이 도구는 그 옆의 빈자리를 봅니다. JVM 플래그, 에이전트, `sun.misc.Unsafe` 사용처처럼 JDK 27 기본값 변화(JEP 523 G1 기본화, JEP 534 압축 객체 헤더)에 실제로 영향을 받는 지점과, 런타임·프레임워크 라인의 지원 종료, 그리고 최근 고위험 CVE 중 이 저장소가 실제로 취약 경로를 쓰는지까지 한 번에 확인합니다.
