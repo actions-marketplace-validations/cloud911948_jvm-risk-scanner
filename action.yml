@@ -1,5 +1,5 @@
 name: JVM Runtime Risk Scan
-description: Scans a repository for JDK 27 default changes (G1, compact object headers), runtime and framework EOL, and high-severity CVEs, and posts the report as a PR comment. Report text is in Korean.
+description: JDK 27 readiness scan - JVM default changes, EOL and CVEs judged by actual usage, as a PR comment (Korean)
 branding:
   icon: shield
   color: green
